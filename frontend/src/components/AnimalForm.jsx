@@ -23,7 +23,16 @@ export default function AnimalForm({ onSuccess }) {
     try {
       await animalService.create(form);
       toast.success('Animal registrado correctamente');
-      setForm({ arete: '', nombre: '', sexo: 'Macho', fecha_nacimiento: '', categoria: 'Becerro', raza: 'Criollo', color: '', senales: '' });
+      setForm({
+        arete: '',
+        nombre: '',
+        sexo: 'Macho',
+        fecha_nacimiento: '',
+        categoria: 'Becerro',
+        raza: 'Criollo',
+        color: '',
+        senales: ''
+      });
       onSuccess?.();
     } catch (err) {
       toast.error('Error al registrar animal');
@@ -34,7 +43,7 @@ export default function AnimalForm({ onSuccess }) {
     <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-4">Registrar Nuevo Animal</h2>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <input
           type="text"
           name="arete"
@@ -76,7 +85,7 @@ export default function AnimalForm({ onSuccess }) {
         <input type="text" name="senales" placeholder="Señales particulares" value={form.senales} onChange={handleChange} className="border p-2 rounded" />
       </div>
       
-      <button type="submit" className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+      <button type="submit" className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
         Registrar Animal
       </button>
     </form>
