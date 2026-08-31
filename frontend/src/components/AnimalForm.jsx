@@ -2,62 +2,105 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { animalService } from '../services/api';
 
+const INITIAL_FORM = {
+  arete: '',
+  nombre: '',
+  sexo: 'Macho',
+  fecha_nacimiento: '',
+  raza: 'Criollo',
+  color: '',
+  senales: '',
+  id_madre: '',
+  id_padre: '',
+  potrero: '',
+  finalidad: '',
+  condicion_reproductiva: ''
+};
+
 export default function AnimalForm({ onSuccess }) {
-  const [form, setForm] = useState({
-    arete: '',
-    nombre: '',
-    sexo: 'Macho',
-    fecha_nacimiento: '',
-    categoria: 'Becerro',
-    raza: 'Criollo',
-    color: '',
-    senales: '',
-    peso_actual: ''
-  });
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [saving, setSaving] = useState(false);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+
+      ...(name === 'sexo' && value === 'Hembra'
+        ? {
+            finalidad:
+              previous.finalidad === 'Ceba'
+                ? ''
+                : previous.finalidad,
+            condicion_reproductiva: ''
+          }
+        : {}),
+
+      ...(name === 'sexo' && value === 'Macho'
+        ? {
+            finalidad: previous.finalidad,
+            condicion_reproductiva:
+              previous.condicion_reproductiva
+          }
+        : {})
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     try {
+      setSaving(true);
+
       const dataToSubmit = {
         ...form,
-        peso_actual: form.peso_actual ? parseFloat(form.peso_actual) : null
+        id_madre: form.id_madre || null,
+        id_padre: form.id_padre || null,
+        potrero: form.potrero || null,
+        finalidad: form.finalidad || null,
+        condicion_reproductiva:
+          form.sexo === 'Macho'
+            ? form.condicion_reproductiva || null
+            : null
       };
-      
+
       await animalService.create(dataToSubmit);
+
       toast.success('Animal registrado correctamente');
-      
-      setForm({
-        arete: '',
-        nombre: '',
-        sexo: 'Macho',
-        fecha_nacimiento: '',
-        categoria: 'Becerro',
-        raza: 'Criollo',
-        color: '',
-        senales: '',
-        peso_actual: ''
-      });
-      
+
+      setForm(INITIAL_FORM);
+
       onSuccess?.();
     } catch (err) {
-      toast.error('Error al registrar animal');
+      const message =
+        err.response?.data?.error ||
+        'Error al registrar animal';
+
+      toast.error(message);
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-blue-900">Registrar Nuevo Animal</h2>
-      
+    <form
+      onSubmit={handleSubmit}
+      className="bg-white p-6 rounded-lg shadow-md"
+    >
+      <h2 className="text-2xl font-bold mb-6 text-blue-900">
+        Registrar Nuevo Animal
+      </h2>
+
       <div className="space-y-4">
-        {/* ID / ARETE */}
+
+        {/* ARETE */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1">
             ID / Arete <span className="text-red-500">*</span>
           </label>
+
           <input
             type="text"
             name="arete"
@@ -65,9 +108,13 @@ export default function AnimalForm({ onSuccess }) {
             value={form.arete}
             onChange={handleChange}
             required
+            maxLength={50}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="text-xs text-gray-500 mt-1">Identificador único del animal (obligatorio)</p>
+
+          <p className="text-xs text-gray-500 mt-1">
+            Identificador único del animal
+          </p>
         </div>
 
         {/* NOMBRE */}
@@ -75,15 +122,16 @@ export default function AnimalForm({ onSuccess }) {
           <label className="block text-sm font-bold text-gray-700 mb-1">
             Nombre / Apodo
           </label>
+
           <input
             type="text"
             name="nombre"
             placeholder="Ej: Reina, Toro Negro, Princesa"
             value={form.nombre}
             onChange={handleChange}
+            maxLength={100}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="text-xs text-gray-500 mt-1">Opcional - Nombre común para identificar fácilmente</p>
         </div>
 
         {/* SEXO */}
@@ -91,10 +139,11 @@ export default function AnimalForm({ onSuccess }) {
           <label className="block text-sm font-bold text-gray-700 mb-1">
             Sexo <span className="text-red-500">*</span>
           </label>
-          <select 
-            name="sexo" 
-            value={form.sexo} 
-            onChange={handleChange} 
+
+          <select
+            name="sexo"
+            value={form.sexo}
+            onChange={handleChange}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="Macho">Macho</option>
@@ -102,40 +151,107 @@ export default function AnimalForm({ onSuccess }) {
           </select>
         </div>
 
-        {/* FECHA DE NACIMIENTO */}
+        {/* FECHA NACIMIENTO */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1">
             Fecha de Nacimiento
           </label>
-          <input 
-            type="date" 
-            name="fecha_nacimiento" 
-            value={form.fecha_nacimiento} 
-            onChange={handleChange} 
+
+          <input
+            type="date"
+            name="fecha_nacimiento"
+            value={form.fecha_nacimiento}
+            onChange={handleChange}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="text-xs text-gray-500 mt-1">Opcional - Si es comprado, coloca fecha aproximada</p>
+
+          <p className="text-xs text-gray-500 mt-1">
+            Si es comprado y no conoces la fecha exacta,
+            puedes colocar una fecha aproximada.
+          </p>
         </div>
 
-        {/* CATEGORÍA */}
+        {/* FINALIDAD */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1">
-            Categoría <span className="text-red-500">*</span>
+            Finalidad Productiva
           </label>
-          <select 
-            name="categoria" 
-            value={form.categoria} 
-            onChange={handleChange} 
+
+          <select
+            name="finalidad"
+            value={form.finalidad}
+            onChange={handleChange}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="Becerro">Becerro (0-7 meses)</option>
-            <option value="Maute">Maute (7-24 meses)</option>
-            <option value="Novilla">Novilla (hembra joven sin partos)</option>
-            <option value="Vaca">Vaca (hembra con partos)</option>
-            <option value="Toro">Toro (macho reproductor)</option>
-            <option value="Novillo">Novillo (macho en engorde)</option>
+            <option value="">
+              Seleccionar...
+            </option>
+
+            <option value="Reproducción">
+              Reproducción
+            </option>
+
+            <option value="Ceba">
+              Ceba
+            </option>
+
+            <option value="Reemplazo">
+              Reemplazo
+            </option>
+
+            <option value="Venta">
+              Venta
+            </option>
+
+            <option value="Otro">
+              Otro
+            </option>
           </select>
-          <p className="text-xs text-gray-500 mt-1">Se actualiza automáticamente según edad/sexo</p>
+        </div>
+
+        {/* CONDICION REPRODUCTIVA */}
+        {form.sexo === 'Macho' && (
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">
+              Condición Reproductiva
+            </label>
+
+            <select
+              name="condicion_reproductiva"
+              value={form.condicion_reproductiva}
+              onChange={handleChange}
+              className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">
+                Seleccionar...
+              </option>
+
+              <option value="Entero">
+                Entero
+              </option>
+
+              <option value="Castrado">
+                Castrado
+              </option>
+            </select>
+          </div>
+        )}
+
+        {/* CATEGORIA AUTOMATICA */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-sm font-bold text-blue-900">
+            Categoría automática
+          </p>
+
+          <p className="text-sm text-blue-800 mt-1">
+            La categoría se determinará automáticamente
+            según sexo, edad, finalidad y eventos
+            reproductivos.
+          </p>
+
+          <p className="text-xs text-blue-700 mt-2">
+            Ejemplo: Becerro → Maute → Novillo o Toro.
+          </p>
         </div>
 
         {/* RAZA */}
@@ -143,10 +259,11 @@ export default function AnimalForm({ onSuccess }) {
           <label className="block text-sm font-bold text-gray-700 mb-1">
             Raza / Mestizaje
           </label>
-          <select 
-            name="raza" 
-            value={form.raza} 
-            onChange={handleChange} 
+
+          <select
+            name="raza"
+            value={form.raza}
+            onChange={handleChange}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="Criollo">Criollo</option>
@@ -154,7 +271,9 @@ export default function AnimalForm({ onSuccess }) {
             <option value="Brahman">Brahman</option>
             <option value="Senepol">Senepol</option>
             <option value="Guzerá">Guzerá</option>
-            <option value="Mosaico">Mosaico/Mestizo</option>
+            <option value="Mosaico">
+              Mosaico/Mestizo
+            </option>
             <option value="Otro">Otro</option>
           </select>
         </div>
@@ -164,55 +283,92 @@ export default function AnimalForm({ onSuccess }) {
           <label className="block text-sm font-bold text-gray-700 mb-1">
             Color del Pelaje
           </label>
+
           <input
             type="text"
             name="color"
             placeholder="Ej: Rojo, Negro, Blanco, Tricolor"
             value={form.color}
             onChange={handleChange}
+            maxLength={100}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        {/* SEÑALES PARTICULARES */}
+        {/* SEÑALES */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1">
             Señales Particulares
           </label>
+
           <input
             type="text"
             name="senales"
-            placeholder="Ej: Careto, Mocho, Tuerto, Cicatriz en pata"
+            placeholder="Ej: Careto, Mocho, Tuerto, Cicatriz"
             value={form.senales}
             onChange={handleChange}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="text-xs text-gray-500 mt-1">Características físicas especiales para identificación</p>
         </div>
 
-        {/* PESO INICIAL */}
+        {/* MADRE */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1">
-            Peso Actual (kg)
+            ID Madre
           </label>
+
           <input
-            type="number"
-            step="0.1"
-            name="peso_actual"
-            placeholder="Ej: 150.5"
-            value={form.peso_actual}
+            type="text"
+            name="id_madre"
+            placeholder="UUID de la madre (opcional)"
+            value={form.id_madre}
             onChange={handleChange}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="text-xs text-gray-500 mt-1">Peso en kg (importante para cálculos de GDP)</p>
+        </div>
+
+        {/* PADRE */}
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-1">
+            ID Padre
+          </label>
+
+          <input
+            type="text"
+            name="id_padre"
+            placeholder="UUID del padre (opcional)"
+            value={form.id_padre}
+            onChange={handleChange}
+            className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {/* POTRERO */}
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-1">
+            Potrero / Lote
+          </label>
+
+          <input
+            type="text"
+            name="potrero"
+            placeholder="Ej: El Cañafístolo"
+            value={form.potrero}
+            onChange={handleChange}
+            maxLength={100}
+            className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
       </div>
-      
-      <button 
-        type="submit" 
-        className="mt-6 w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold transition"
+
+      <button
+        type="submit"
+        disabled={saving}
+        className="mt-6 w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-blue-300 font-bold transition"
       >
-        Registrar Animal
+        {saving
+          ? 'Registrando...'
+          : 'Registrar Animal'}
       </button>
     </form>
   );
