@@ -8,11 +8,13 @@ export default function AnimalsPage() {
   const [animals, setAnimals] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Animal actualmente seleccionado para editar
   const [selectedAnimal, setSelectedAnimal] = useState(null);
 
-  // Animal actualmente seleccionado para dar de baja
-  const [deletingAnimal, setDeletingAnimal] = useState(null);
+  const [statusAnimal, setStatusAnimal] = useState(null);
+  const [newStatus, setNewStatus] = useState("");
+
+  const [deleteAnimal, setDeleteAnimal] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   useEffect(() => {
     fetchAnimals();
@@ -22,88 +24,103 @@ export default function AnimalsPage() {
     try {
       setLoading(true);
 
-      const response = await animalService.getAll();
+      const data = await animalService.getAll();
 
-      // Mantiene compatibilidad con la respuesta actual del backend
-      const animalData = response?.data ?? response;
-
-      setAnimals(Array.isArray(animalData) ? animalData : []);
+      setAnimals(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Error cargando animales:", err);
-
+      console.error(err);
       toast.error("Error cargando animales");
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Abrir modal de edición
-   */
+  // =========================
+  // EDITAR
+  // =========================
+
   const handleEdit = (animal) => {
     setSelectedAnimal(animal);
   };
 
-  /**
-   * Cerrar modal de edición
-   */
-  const handleCloseEdit = () => {
-    setSelectedAnimal(null);
-  };
-
-  /**
-   * Después de editar correctamente
-   */
   const handleEditSuccess = async () => {
     setSelectedAnimal(null);
     await fetchAnimals();
   };
 
-  /**
-   * Solicitar confirmación para dar de baja.
-   *
-   * No eliminamos físicamente el animal.
-   * El backend lo cambia a estado "Desaparecido".
-   */
-  const handleDelete = (animal) => {
-    setDeletingAnimal(animal);
+  // =========================
+  // CAMBIAR ESTADO
+  // =========================
+
+  const openStatusModal = (animal) => {
+    setStatusAnimal(animal);
+    setNewStatus(animal.estado || "Activo");
   };
 
-  /**
-   * Cancelar baja
-   */
-  const handleCancelDelete = () => {
-    setDeletingAnimal(null);
+  const closeStatusModal = () => {
+    setStatusAnimal(null);
+    setNewStatus("");
   };
 
-  /**
-   * Confirmar baja lógica
-   */
-  const handleConfirmDelete = async () => {
-    if (!deletingAnimal) return;
+  const handleStatusChange = async () => {
+    if (!statusAnimal || !newStatus) return;
 
     try {
-      await animalService.delete(deletingAnimal.id);
+      await animalService.updateStatus(statusAnimal.id, newStatus);
 
-      toast.success(
-        `Animal ${deletingAnimal.arete} dado de baja correctamente`,
-      );
+      toast.success(`Estado actualizado a "${newStatus}"`);
 
-      setDeletingAnimal(null);
-
+      closeStatusModal();
       await fetchAnimals();
     } catch (err) {
-      console.error("Error al dar de baja:", err);
+      console.error(err);
+
+      toast.error(err?.response?.data?.error || "Error actualizando el estado");
+    }
+  };
+
+  // =========================
+  // ELIMINACIÓN PERMANENTE
+  // =========================
+
+  const openDeleteModal = (animal) => {
+    setDeleteAnimal(animal);
+    setDeleteConfirmation("");
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteAnimal(null);
+    setDeleteConfirmation("");
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deleteAnimal) return;
+
+    if (deleteConfirmation !== deleteAnimal.arete) {
+      toast.error("Debes escribir exactamente el arete del animal");
+      return;
+    }
+
+    try {
+      await animalService.deletePermanent(deleteAnimal.id);
+
+      toast.success(`Animal ${deleteAnimal.arete} eliminado permanentemente`);
+
+      closeDeleteModal();
+      await fetchAnimals();
+    } catch (err) {
+      console.error(err);
 
       toast.error(
-        err?.response?.data?.error || "Error al dar de baja el animal",
+        err?.response?.data?.error || "No se pudo eliminar el animal",
       );
     }
   };
 
-  /**
-   * Determina las clases visuales del estado
-   */
+  // =========================
+  // ESTILOS DE ESTADO
+  // =========================
+
   const getStatusClasses = (estado) => {
     switch (estado) {
       case "Activo":
@@ -127,19 +144,17 @@ export default function AnimalsPage() {
     <>
       <div className="grid md:grid-cols-3 gap-6">
         {/* =========================
-            LISTADO DE ANIMALES
+            ANIMALES
         ========================== */}
+
         <div className="md:col-span-2">
           <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+            <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-2xl font-bold">Animales Registrados</h2>
 
                 <p className="text-sm text-gray-500 mt-1">
-                  {animals.length}{" "}
-                  {animals.length === 1
-                    ? "animal registrado"
-                    : "animales registrados"}
+                  {animals.length} animales
                 </p>
               </div>
 
@@ -159,11 +174,7 @@ export default function AnimalsPage() {
               </div>
             ) : animals.length === 0 ? (
               <div className="py-10 text-center text-gray-500">
-                <p className="text-lg">No hay animales registrados</p>
-
-                <p className="text-sm mt-1">
-                  Utiliza el formulario para registrar el primer animal.
-                </p>
+                No hay animales registrados
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -189,31 +200,21 @@ export default function AnimalsPage() {
                   <tbody>
                     {animals.map((animal) => (
                       <tr key={animal.id} className="border-t hover:bg-gray-50">
-                        {/* ARETE */}
                         <td className="p-3 font-bold">{animal.arete}</td>
 
-                        {/* NOMBRE */}
                         <td className="p-3">{animal.nombre || "-"}</td>
 
-                        {/* SEXO */}
                         <td className="p-3">{animal.sexo}</td>
 
-                        {/* CATEGORÍA */}
-                        <td className="p-3">
-                          <span className="font-medium">
-                            {animal.categoria || "-"}
-                          </span>
-                        </td>
+                        <td className="p-3">{animal.categoria || "-"}</td>
 
-                        {/* PESO */}
-                        <td className="p-3 whitespace-nowrap">
+                        <td className="p-3">
                           {animal.peso_actual !== null &&
                           animal.peso_actual !== undefined
                             ? `${animal.peso_actual} kg`
                             : "-"}
                         </td>
 
-                        {/* ESTADO */}
                         <td className="p-3">
                           <span
                             className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getStatusClasses(
@@ -224,28 +225,23 @@ export default function AnimalsPage() {
                           </span>
                         </td>
 
-                        {/* ACCIONES */}
                         <td className="p-3">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               type="button"
                               onClick={() => handleEdit(animal)}
-                              className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
-                              title="Editar animal"
+                              className="px-3 py-1.5 text-sm text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
                             >
                               ✏️ Editar
                             </button>
 
-                            {animal.estado === "Activo" && (
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(animal)}
-                                className="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100"
-                                title="Dar de baja animal"
-                              >
-                                🗑️ Baja
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => openStatusModal(animal)}
+                              className="px-3 py-1.5 text-sm text-orange-700 bg-orange-50 rounded-lg hover:bg-orange-100"
+                            >
+                              🔄 Estado
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -258,92 +254,76 @@ export default function AnimalsPage() {
         </div>
 
         {/* =========================
-            FORMULARIO DE REGISTRO
+            REGISTRAR
         ========================== */}
+
         <div>
           <AnimalForm onSuccess={fetchAnimals} />
         </div>
       </div>
 
       {/* =========================
-          MODAL DE EDICIÓN
+          MODAL EDITAR
       ========================== */}
+
       {selectedAnimal && (
         <AnimalEditModal
           animal={selectedAnimal}
-          onClose={handleCloseEdit}
+          onClose={() => setSelectedAnimal(null)}
           onSuccess={handleEditSuccess}
         />
       )}
 
       {/* =========================
-          MODAL CONFIRMACIÓN DE BAJA
+          MODAL ESTADO
       ========================== */}
-      {deletingAnimal && (
+
+      {statusAnimal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md bg-white rounded-xl shadow-2xl">
             <div className="p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-red-100 text-red-600 text-xl">
-                  ⚠️
-                </div>
+              <h3 className="text-xl font-bold text-gray-900">
+                Cambiar estado
+              </h3>
 
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">
-                    Dar de baja animal
-                  </h3>
+              <p className="text-gray-600 mt-2">
+                Animal:
+                <strong className="ml-1">{statusAnimal.arete}</strong>
+              </p>
 
-                  <p className="text-gray-600 mt-2">
-                    ¿Estás seguro de que deseas dar de baja este animal?
+              <div className="mt-5">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Estado
+                </label>
+
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-3"
+                >
+                  <option value="Activo">Activo</option>
+
+                  <option value="Desaparecido">Desaparecido</option>
+
+                  <option value="Vendido">Vendido</option>
+
+                  <option value="Muerto">Muerto</option>
+                </select>
+              </div>
+
+              {newStatus === "Desaparecido" && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800">
+                    El animal permanecerá registrado y podrás volver a cambiarlo
+                    a<strong> Activo</strong> cuando sea localizado.
                   </p>
                 </div>
-              </div>
+              )}
 
-              {/* DATOS DEL ANIMAL */}
-              <div className="mt-5 bg-gray-50 rounded-lg p-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-gray-500">Arete</span>
-
-                    <p className="font-bold">{deletingAnimal.arete}</p>
-                  </div>
-
-                  <div>
-                    <span className="text-gray-500">Nombre</span>
-
-                    <p className="font-medium">
-                      {deletingAnimal.nombre || "-"}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span className="text-gray-500">Sexo</span>
-
-                    <p>{deletingAnimal.sexo}</p>
-                  </div>
-
-                  <div>
-                    <span className="text-gray-500">Categoría</span>
-
-                    <p>{deletingAnimal.categoria || "-"}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  <strong>Importante:</strong> el animal no será eliminado
-                  físicamente de la base de datos. Se conservará su historial y
-                  cambiará a estado
-                  <strong> Desaparecido</strong>.
-                </p>
-              </div>
-
-              {/* BOTONES */}
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   type="button"
-                  onClick={handleCancelDelete}
+                  onClick={closeStatusModal}
                   className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
                 >
                   Cancelar
@@ -351,10 +331,73 @@ export default function AnimalsPage() {
 
                 <button
                   type="button"
-                  onClick={handleConfirmDelete}
-                  className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  onClick={handleStatusChange}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  Sí, dar de baja
+                  Guardar estado
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================
+          MODAL ELIMINACIÓN
+      ========================== */}
+
+      {deleteAnimal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl">
+            <div className="p-6">
+              <h3 className="text-xl font-bold text-red-700">
+                Eliminar permanentemente
+              </h3>
+
+              <p className="text-gray-700 mt-3">
+                Esta acción eliminará definitivamente el registro del animal.
+              </p>
+
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">
+                  Utiliza esta opción únicamente para
+                  <strong> datos de prueba </strong>o registros creados por
+                  error.
+                </p>
+              </div>
+
+              <div className="mt-5">
+                <p className="text-sm text-gray-600 mb-2">
+                  Para confirmar, escribe:
+                </p>
+
+                <p className="font-bold mb-2">{deleteAnimal.arete}</p>
+
+                <input
+                  type="text"
+                  value={deleteConfirmation}
+                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                  placeholder="Escribe el arete"
+                  className="w-full border border-gray-300 rounded-lg p-3"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  disabled={deleteConfirmation !== deleteAnimal.arete}
+                  onClick={handlePermanentDelete}
+                  className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Eliminar definitivamente
                 </button>
               </div>
             </div>

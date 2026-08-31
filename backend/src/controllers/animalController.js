@@ -301,18 +301,32 @@ exports.updateAnimal = async (req, res) => {
   }
 };
 
-// Eliminación lógica
-exports.deleteAnimal = async (req, res) => {
+// Cambiar estado del animal
+exports.updateAnimalStatus = async (req, res) => {
   try {
     const { id } = req.params;
+    const { estado } = req.body;
+
+    const estadosPermitidos = [
+      'Activo',
+      'Vendido',
+      'Muerto',
+      'Desaparecido'
+    ];
+
+    if (!estadosPermitidos.includes(estado)) {
+      return res.status(400).json({
+        error: 'Estado de animal no válido'
+      });
+    }
 
     const { data, error } = await supabase
-      .from("animals")
+      .from('animals')
       .update({
-        estado: "Desaparecido",
-        updated_at: new Date().toISOString(),
+        estado,
+        updated_at: new Date().toISOString()
       })
-      .eq("id", id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -320,13 +334,50 @@ exports.deleteAnimal = async (req, res) => {
 
     res.json({
       success: true,
-      data,
+      data
     });
+
   } catch (err) {
-    console.error("deleteAnimal:", err);
+    console.error('Error actualizando estado:', err);
 
     res.status(400).json({
-      error: err.message,
+      error: err.message
+    });
+  }
+};
+
+
+// Eliminar animal permanentemente
+// Usar únicamente para datos de prueba o registros creados por error.
+exports.deleteAnimalPermanent = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: animal, error: findError } = await supabase
+      .from('animals')
+      .select('id, arete, nombre')
+      .eq('id', id)
+      .single();
+
+    if (findError) throw findError;
+
+    const { error } = await supabase
+      .from('animals')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: `Animal ${animal.arete} eliminado permanentemente`
+    });
+
+  } catch (err) {
+    console.error('Error eliminando animal permanentemente:', err);
+
+    res.status(400).json({
+      error: err.message
     });
   }
 };

@@ -31,8 +31,15 @@ export const animalService = {
     return response.data;
   },
 
-  delete: async (id) => {
-    const response = await api.delete(`/animals/${id}`);
+  updateStatus: async (id, estado) => {
+    const response = await api.patch(`/animals/${id}/status`, {
+      estado,
+    });
+    return response.data;
+  },
+
+  deletePermanent: async (id) => {
+    const response = await api.delete(`/animals/${id}/permanent`);
     return response.data;
   },
 };

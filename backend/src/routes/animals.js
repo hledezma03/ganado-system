@@ -12,6 +12,11 @@ router.get('/:id', animalController.getAnimal);
 
 router.put('/:id', animalController.updateAnimal);
 
-router.delete('/:id', animalController.deleteAnimal);
+router.patch('/:id/status', animalController.updateAnimalStatus);
+
+router.delete(
+  '/:id/permanent',
+  animalController.deleteAnimalPermanent
+);
 
 module.exports = router;
