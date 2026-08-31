@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
-import toast from 'react-hot-toast';
-import { animalService } from '../services/api';
+import React, { useState } from "react";
+import toast from "react-hot-toast";
+import { animalService } from "../services/api";
 
 const INITIAL_FORM = {
-  arete: '',
-  nombre: '',
-  sexo: 'Macho',
-  fecha_nacimiento: '',
-  raza: 'Criollo',
-  color: '',
-  senales: '',
-  id_madre: '',
-  id_padre: '',
-  potrero: '',
-  finalidad: '',
-  condicion_reproductiva: ''
+  arete: "",
+  nombre: "",
+  sexo: "Macho",
+  fecha_nacimiento: "",
+  raza: "Criollo",
+  color: "",
+  senales: "",
+  id_madre: "",
+  id_padre: "",
+  potrero: "",
+  finalidad: "",
+  condicion_reproductiva: "",
 };
 
 export default function AnimalForm({ onSuccess }) {
@@ -28,23 +28,19 @@ export default function AnimalForm({ onSuccess }) {
       ...previous,
       [name]: value,
 
-      ...(name === 'sexo' && value === 'Hembra'
+      ...(name === "sexo" && value === "Hembra"
         ? {
-            finalidad:
-              previous.finalidad === 'Ceba'
-                ? ''
-                : previous.finalidad,
-            condicion_reproductiva: ''
+            finalidad: previous.finalidad === "Ceba" ? "" : previous.finalidad,
+            condicion_reproductiva: "",
           }
         : {}),
 
-      ...(name === 'sexo' && value === 'Macho'
+      ...(name === "sexo" && value === "Macho"
         ? {
             finalidad: previous.finalidad,
-            condicion_reproductiva:
-              previous.condicion_reproductiva
+            condicion_reproductiva: previous.condicion_reproductiva,
           }
-        : {})
+        : {}),
     }));
   };
 
@@ -61,22 +57,18 @@ export default function AnimalForm({ onSuccess }) {
         potrero: form.potrero || null,
         finalidad: form.finalidad || null,
         condicion_reproductiva:
-          form.sexo === 'Macho'
-            ? form.condicion_reproductiva || null
-            : null
+          form.sexo === "Macho" ? form.condicion_reproductiva || null : null,
       };
 
       await animalService.create(dataToSubmit);
 
-      toast.success('Animal registrado correctamente');
+      toast.success("Animal registrado correctamente");
 
       setForm(INITIAL_FORM);
 
       onSuccess?.();
     } catch (err) {
-      const message =
-        err.response?.data?.error ||
-        'Error al registrar animal';
+      const message = err.response?.data?.error || "Error al registrar animal";
 
       toast.error(message);
     } finally {
@@ -85,16 +77,12 @@ export default function AnimalForm({ onSuccess }) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="bg-white p-6 rounded-lg shadow-md"
-    >
+    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-blue-900">
         Registrar Nuevo Animal
       </h2>
 
       <div className="space-y-4">
-
         {/* ARETE */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1">
@@ -166,8 +154,8 @@ export default function AnimalForm({ onSuccess }) {
           />
 
           <p className="text-xs text-gray-500 mt-1">
-            Si es comprado y no conoces la fecha exacta,
-            puedes colocar una fecha aproximada.
+            Si es comprado y no conoces la fecha exacta, puedes colocar una
+            fecha aproximada.
           </p>
         </div>
 
@@ -183,34 +171,22 @@ export default function AnimalForm({ onSuccess }) {
             onChange={handleChange}
             className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">
-              Seleccionar...
-            </option>
+            <option value="">Seleccionar...</option>
 
-            <option value="Reproducción">
-              Reproducción
-            </option>
+            <option value="Reproducción">Reproducción</option>
 
-            <option value="Ceba">
-              Ceba
-            </option>
+            <option value="Ceba">Ceba</option>
 
-            <option value="Reemplazo">
-              Reemplazo
-            </option>
+            <option value="Reemplazo">Reemplazo</option>
 
-            <option value="Venta">
-              Venta
-            </option>
+            <option value="Venta">Venta</option>
 
-            <option value="Otro">
-              Otro
-            </option>
+            <option value="Otro">Otro</option>
           </select>
         </div>
 
         {/* CONDICION REPRODUCTIVA */}
-        {form.sexo === 'Macho' && (
+        {form.sexo === "Macho" && (
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">
               Condición Reproductiva
@@ -222,35 +198,26 @@ export default function AnimalForm({ onSuccess }) {
               onChange={handleChange}
               className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">
-                Seleccionar...
-              </option>
+              <option value="">Seleccionar...</option>
 
-              <option value="Entero">
-                Entero
-              </option>
+              <option value="Entero">Entero</option>
 
-              <option value="Castrado">
-                Castrado
-              </option>
+              <option value="Castrado">Castrado</option>
             </select>
           </div>
         )}
 
-        {/* CATEGORIA AUTOMATICA */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="text-sm font-bold text-blue-900">
-            Categoría automática
-          </p>
+        {/* CATEGORÍA */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <label className="block text-sm font-bold text-gray-700 mb-1">
+            Categoría
+          </label>
 
-          <p className="text-sm text-blue-800 mt-1">
-            La categoría se determinará automáticamente
-            según sexo, edad, finalidad y eventos
-            reproductivos.
-          </p>
+          <div className="text-blue-900 font-semibold">Automática</div>
 
-          <p className="text-xs text-blue-700 mt-2">
-            Ejemplo: Becerro → Maute → Novillo o Toro.
+          <p className="text-xs text-gray-600 mt-1">
+            La categoría se determina automáticamente según sexo, edad y
+            finalidad productiva. Podrá cambiar durante la vida del animal.
           </p>
         </div>
 
@@ -271,9 +238,7 @@ export default function AnimalForm({ onSuccess }) {
             <option value="Brahman">Brahman</option>
             <option value="Senepol">Senepol</option>
             <option value="Guzerá">Guzerá</option>
-            <option value="Mosaico">
-              Mosaico/Mestizo
-            </option>
+            <option value="Mosaico">Mosaico/Mestizo</option>
             <option value="Otro">Otro</option>
           </select>
         </div>
@@ -366,9 +331,7 @@ export default function AnimalForm({ onSuccess }) {
         disabled={saving}
         className="mt-6 w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-blue-300 font-bold transition"
       >
-        {saving
-          ? 'Registrando...'
-          : 'Registrar Animal'}
+        {saving ? "Registrando..." : "Registrar Animal"}
       </button>
     </form>
   );
