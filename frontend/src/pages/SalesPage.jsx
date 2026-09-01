@@ -4,24 +4,24 @@ import { animalService, saleService } from "../services/api";
 
 export default function SalesPage() {
   const [animals, setAnimals] = useState([]);
-  const [sales, setSales] = useState([]);
+  const [batches, setBatches] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Todas");
-  const [sexFilter, setSexFilter] = useState("Todos");
+
+  const [selectedAnimals, setSelectedAnimals] = useState([]);
 
   const [form, setForm] = useState({
     fecha_venta: new Date().toISOString().split("T")[0],
     comprador: "",
     tipo_venta: "Pie",
-    precio_kg: "",
     notas: "",
   });
 
-  const [selectedAnimals, setSelectedAnimals] = useState([]);
+  const [saleData, setSaleData] = useState({});
 
   useEffect(() => {
     loadData();
@@ -31,28 +31,52 @@ export default function SalesPage() {
     try {
       setLoading(true);
 
-      const [animalsResponse, salesResponse] = await Promise.all([
+      const [animalsResponse, batchesResponse] = await Promise.all([
         animalService.getAll(),
-        saleService.getAll(),
+        saleService.getBatches(),
       ]);
 
-      const animalsData = animalsResponse.data || animalsResponse;
-      const salesData = salesResponse.data || salesResponse;
-
-      setAnimals(
-        Array.isArray(animalsData)
-          ? animalsData.filter((animal) => animal.estado === "Activo")
-          : [],
-      );
-
-      setSales(Array.isArray(salesData) ? salesData : []);
+      setAnimals(animalsResponse || []);
+      setBatches(batchesResponse || []);
     } catch (err) {
       console.error(err);
-      toast.error("Error cargando información");
+      toast.error("Error cargando información de ventas");
     } finally {
       setLoading(false);
     }
   };
+
+  // Solo animales activos pueden ser vendidos
+  const availableAnimals = useMemo(() => {
+    return animals.filter((animal) => animal.estado === "Activo");
+  }, [animals]);
+
+  // Categorías disponibles
+  const categories = useMemo(() => {
+    return [
+      "Todas",
+      ...new Set(
+        availableAnimals.map((animal) => animal.categoria).filter(Boolean),
+      ),
+    ];
+  }, [availableAnimals]);
+
+  // Buscar y filtrar animales
+  const filteredAnimals = useMemo(() => {
+    const term = search.toLowerCase().trim();
+
+    return availableAnimals.filter((animal) => {
+      const matchesSearch =
+        !term ||
+        animal.arete?.toLowerCase().includes(term) ||
+        animal.nombre?.toLowerCase().includes(term);
+
+      const matchesCategory =
+        categoryFilter === "Todas" || animal.categoria === categoryFilter;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [availableAnimals, search, categoryFilter]);
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -63,115 +87,149 @@ export default function SalesPage() {
     }));
   };
 
+  const calculateAge = (birthDate, saleDate) => {
+    if (!birthDate || !saleDate) return null;
+
+    const birth = new Date(birthDate);
+    const sale = new Date(saleDate);
+
+    const difference = sale.getTime() - birth.getTime();
+
+    if (difference < 0) return null;
+
+    return Math.floor(difference / (1000 * 60 * 60 * 24));
+  };
+
   const toggleAnimal = (animal) => {
-    setSelectedAnimals((prev) => {
-      const exists = prev.some((item) => item.id_animal === animal.id);
-
-      if (exists) {
-        return prev.filter((item) => item.id_animal !== animal.id);
-      }
-
-      return [
-        ...prev,
-        {
-          id_animal: animal.id,
-          peso_venta_kg: animal.peso_actual || "",
-          rendimiento_canal: "",
-        },
-      ];
-    });
-  };
-
-  const updateSelectedAnimal = (animalId, field, value) => {
-    setSelectedAnimals((prev) =>
-      prev.map((animal) =>
-        animal.id_animal === animalId
-          ? {
-              ...animal,
-              [field]: value,
-            }
-          : animal,
-      ),
-    );
-  };
-
-  const getSelectedAnimal = (id) =>
-    selectedAnimals.find((animal) => animal.id_animal === id);
-
-  // ==========================================
-  // FILTROS
-  // ==========================================
-
-  const filteredAnimals = useMemo(() => {
-    const search = searchTerm.toLowerCase().trim();
-
-    return animals.filter((animal) => {
-      const matchesSearch =
-        !search ||
-        animal.arete?.toLowerCase().includes(search) ||
-        animal.nombre?.toLowerCase().includes(search);
-
-      const matchesCategory =
-        categoryFilter === "Todas" || animal.categoria === categoryFilter;
-
-      const matchesSex = sexFilter === "Todos" || animal.sexo === sexFilter;
-
-      return matchesSearch && matchesCategory && matchesSex;
-    });
-  }, [animals, searchTerm, categoryFilter, sexFilter]);
-
-  // ==========================================
-  // SELECCIONAR TODOS LOS FILTRADOS
-  // ==========================================
-
-  const allFilteredSelected =
-    filteredAnimals.length > 0 &&
-    filteredAnimals.every((animal) =>
-      selectedAnimals.some((selected) => selected.id_animal === animal.id),
+    const alreadySelected = selectedAnimals.some(
+      (item) => item.id === animal.id,
     );
 
-  const toggleSelectAll = () => {
-    if (allFilteredSelected) {
-      const filteredIds = new Set(filteredAnimals.map((animal) => animal.id));
-
+    if (alreadySelected) {
       setSelectedAnimals((prev) =>
-        prev.filter((animal) => !filteredIds.has(animal.id_animal)),
+        prev.filter((item) => item.id !== animal.id),
       );
+
+      setSaleData((prev) => {
+        const copy = { ...prev };
+        delete copy[animal.id];
+        return copy;
+      });
 
       return;
     }
 
-    setSelectedAnimals((prev) => {
-      const existingIds = new Set(prev.map((animal) => animal.id_animal));
+    const edadDias = calculateAge(animal.fecha_nacimiento, form.fecha_venta);
 
-      const newAnimals = filteredAnimals
-        .filter((animal) => !existingIds.has(animal.id))
-        .map((animal) => ({
-          id_animal: animal.id,
-          peso_venta_kg: animal.peso_actual || "",
+    setSelectedAnimals((prev) => [...prev, animal]);
+
+    setSaleData((prev) => ({
+      ...prev,
+      [animal.id]: {
+        peso_venta_kg: animal.peso_actual ?? "",
+        precio_kg: "",
+        rendimiento_canal: "",
+        edad_dias: edadDias,
+      },
+    }));
+  };
+
+  const updateSaleData = (animalId, field, value) => {
+    setSaleData((prev) => ({
+      ...prev,
+      [animalId]: {
+        ...prev[animalId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const selectAllFiltered = () => {
+    const newAnimals = filteredAnimals.filter(
+      (animal) =>
+        !selectedAnimals.some((selected) => selected.id === animal.id),
+    );
+
+    if (newAnimals.length === 0) return;
+
+    setSelectedAnimals((prev) => [...prev, ...newAnimals]);
+
+    setSaleData((prev) => {
+      const updated = { ...prev };
+
+      newAnimals.forEach((animal) => {
+        updated[animal.id] = {
+          peso_venta_kg: animal.peso_actual ?? "",
+          precio_kg: "",
           rendimiento_canal: "",
-        }));
+          edad_dias: calculateAge(animal.fecha_nacimiento, form.fecha_venta),
+        };
+      });
 
-      return [...prev, ...newAnimals];
+      return updated;
     });
   };
 
-  // ==========================================
-  // RESUMEN
-  // ==========================================
+  const clearSelection = () => {
+    setSelectedAnimals([]);
+    setSaleData({});
+  };
 
-  const totalPeso = selectedAnimals.reduce(
-    (total, animal) => total + (Number(animal.peso_venta_kg) || 0),
-    0,
-  );
+  const handleSaleDateChange = (e) => {
+    const fecha = e.target.value;
 
-  const precioKg = Number(form.precio_kg) || 0;
+    setForm((prev) => ({
+      ...prev,
+      fecha_venta: fecha,
+    }));
 
-  const ingresoTotal = totalPeso * precioKg;
+    setSaleData((prev) => {
+      const updated = { ...prev };
 
-  // ==========================================
-  // REGISTRAR VENTA
-  // ==========================================
+      selectedAnimals.forEach((animal) => {
+        updated[animal.id] = {
+          ...updated[animal.id],
+          edad_dias: calculateAge(animal.fecha_nacimiento, fecha),
+        };
+      });
+
+      return updated;
+    });
+  };
+
+  const getWeightGain = (animal) => {
+    const data = saleData[animal.id];
+
+    if (!data || data.peso_venta_kg === "" || animal.peso_nacimiento == null) {
+      return null;
+    }
+
+    return Number(data.peso_venta_kg) - Number(animal.peso_nacimiento);
+  };
+
+  const getDailyGain = (animal) => {
+    const data = saleData[animal.id];
+
+    const pesoGanado = getWeightGain(animal);
+
+    if (pesoGanado === null || !data.edad_dias || data.edad_dias <= 0) {
+      return null;
+    }
+
+    return pesoGanado / data.edad_dias;
+  };
+
+  const getTotalSale = () => {
+    return selectedAnimals.reduce((total, animal) => {
+      const data = saleData[animal.id];
+
+      if (!data || data.peso_venta_kg === "" || data.precio_kg === "") {
+        return total;
+      }
+
+      return total + Number(data.peso_venta_kg) * Number(data.precio_kg);
+    }, 0);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -181,33 +239,16 @@ export default function SalesPage() {
       return;
     }
 
-    if (!form.comprador.trim()) {
-      toast.error("Ingresa el comprador");
-      return;
-    }
+    for (const animal of selectedAnimals) {
+      const data = saleData[animal.id];
 
-    if (!precioKg || precioKg <= 0) {
-      toast.error("Ingresa un precio por kg válido");
-      return;
-    }
+      if (data.peso_venta_kg === "" || Number(data.peso_venta_kg) <= 0) {
+        toast.error(`Falta el peso de venta del animal ${animal.arete}`);
+        return;
+      }
 
-    const invalidWeight = selectedAnimals.some(
-      (animal) => !animal.peso_venta_kg || Number(animal.peso_venta_kg) <= 0,
-    );
-
-    if (invalidWeight) {
-      toast.error("Todos los animales deben tener peso de venta");
-      return;
-    }
-
-    if (form.tipo_venta === "Canal") {
-      const invalidYield = selectedAnimals.some(
-        (animal) =>
-          !animal.rendimiento_canal || Number(animal.rendimiento_canal) <= 0,
-      );
-
-      if (invalidYield) {
-        toast.error("Todos los animales deben tener rendimiento en canal");
+      if (data.precio_kg === "" || Number(data.precio_kg) <= 0) {
+        toast.error(`Falta el precio por kg del animal ${animal.arete}`);
         return;
       }
     }
@@ -215,72 +256,87 @@ export default function SalesPage() {
     try {
       setSaving(true);
 
-      await saleService.create({
-        ...form,
-        precio_kg: precioKg,
-        animales: selectedAnimals,
-      });
+      const payload = {
+        fecha_venta: form.fecha_venta,
+        comprador: form.comprador.trim() || null,
+        tipo_venta: form.tipo_venta,
+        notas: form.notas.trim() || null,
 
-      toast.success("Venta registrada correctamente");
+        animales: selectedAnimals.map((animal) => {
+          const data = saleData[animal.id];
+
+          return {
+            id_animal: animal.id,
+            peso_venta_kg: Number(data.peso_venta_kg),
+            precio_kg: Number(data.precio_kg),
+            rendimiento_canal:
+              data.rendimiento_canal === ""
+                ? null
+                : Number(data.rendimiento_canal),
+          };
+        }),
+      };
+
+      await saleService.createBatch(payload);
+
+      toast.success(`Venta registrada: ${selectedAnimals.length} animales`);
+
+      setSelectedAnimals([]);
+      setSaleData({});
 
       setForm({
         fecha_venta: new Date().toISOString().split("T")[0],
         comprador: "",
         tipo_venta: "Pie",
-        precio_kg: "",
         notas: "",
       });
-
-      setSelectedAnimals([]);
-
-      setSearchTerm("");
-      setCategoryFilter("Todas");
-      setSexFilter("Todos");
 
       await loadData();
     } catch (err) {
       console.error(err);
 
-      toast.error(err?.response?.data?.error || "Error registrando venta");
+      toast.error(err?.response?.data?.error || "Error registrando la venta");
     } finally {
       setSaving(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="p-6">
+        <p>Cargando ventas...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* ======================================
-          ENCABEZADO
-      ====================================== */}
-
+      {/* TITULO */}
       <div>
         <h1 className="text-3xl font-bold text-blue-900">Ventas de Ganado</h1>
 
-        <p className="text-gray-500 mt-1">
-          Registra las ventas por lote y los animales incluidos.
+        <p className="text-gray-600 mt-1">
+          Registra la venta de uno o varios animales como un solo lote.
         </p>
       </div>
 
-      {/* ======================================
-          NUEVA VENTA
-      ====================================== */}
+      {/* DATOS DE LA VENTA */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-bold mb-4">Datos de la venta</h2>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-5">Nueva Venta</h2>
-
-        {/* DATOS GENERALES */}
-
-        <div className="grid md:grid-cols-4 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-bold mb-1">Fecha</label>
+            <label className="block text-sm font-bold mb-1">
+              Fecha de venta *
+            </label>
 
             <input
               type="date"
               name="fecha_venta"
               value={form.fecha_venta}
-              onChange={handleFormChange}
+              onChange={handleSaleDateChange}
               required
-              className="w-full border rounded-lg p-2"
+              className="w-full border rounded p-2"
             />
           </div>
 
@@ -293,7 +349,7 @@ export default function SalesPage() {
               value={form.comprador}
               onChange={handleFormChange}
               placeholder="Nombre del comprador"
-              className="w-full border rounded-lg p-2"
+              className="w-full border rounded p-2"
             />
           </div>
 
@@ -306,7 +362,7 @@ export default function SalesPage() {
               name="tipo_venta"
               value={form.tipo_venta}
               onChange={handleFormChange}
-              className="w-full border rounded-lg p-2"
+              className="w-full border rounded p-2"
             >
               <option value="Pie">En pie</option>
 
@@ -316,351 +372,370 @@ export default function SalesPage() {
 
           <div>
             <label className="block text-sm font-bold mb-1">
-              Precio por kg
+              Animales seleccionados
             </label>
 
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              name="precio_kg"
-              value={form.precio_kg}
-              onChange={handleFormChange}
-              placeholder="Ej: 3.50"
-              className="w-full border rounded-lg p-2"
-            />
+            <div className="border rounded p-2 bg-gray-50 font-bold">
+              {selectedAnimals.length}
+            </div>
           </div>
         </div>
-
-        {/* ======================================
-            BUSQUEDA Y FILTROS
-        ====================================== */}
-
-        <div className="mt-6">
-          <div className="flex flex-col md:flex-row md:items-end gap-3">
-            {/* BUSCAR */}
-
-            <div className="flex-1">
-              <label className="block text-sm font-bold mb-1">
-                Buscar animal
-              </label>
-
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por arete o nombre..."
-                className="w-full border rounded-lg p-2"
-              />
-            </div>
-
-            {/* CATEGORIA */}
-
-            <div className="md:w-52">
-              <label className="block text-sm font-bold mb-1">Categoría</label>
-
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full border rounded-lg p-2"
-              >
-                <option value="Todas">Todas</option>
-
-                <option value="Becerro">Becerro</option>
-
-                <option value="Maute">Maute</option>
-
-                <option value="Novilla">Novilla</option>
-
-                <option value="Vaca">Vaca</option>
-
-                <option value="Toro">Toro</option>
-
-                <option value="Novillo">Novillo</option>
-              </select>
-            </div>
-
-            {/* SEXO */}
-
-            <div className="md:w-40">
-              <label className="block text-sm font-bold mb-1">Sexo</label>
-
-              <select
-                value={sexFilter}
-                onChange={(e) => setSexFilter(e.target.value)}
-                className="w-full border rounded-lg p-2"
-              >
-                <option value="Todos">Todos</option>
-
-                <option value="Macho">Machos</option>
-
-                <option value="Hembra">Hembras</option>
-              </select>
-            </div>
-          </div>
-
-          {/* CONTADORES */}
-
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-3">
-            <p className="text-sm text-gray-500">
-              Mostrando <strong>{filteredAnimals.length}</strong> de{" "}
-              <strong>{animals.length}</strong> animales activos
-            </p>
-
-            <p className="text-sm font-bold text-blue-700">
-              {selectedAnimals.length} seleccionados
-            </p>
-          </div>
-        </div>
-
-        {/* ======================================
-            ANIMALES
-        ====================================== */}
 
         <div className="mt-4">
-          <h3 className="font-bold mb-3">Seleccionar animales</h3>
-
-          {loading ? (
-            <p>Cargando animales...</p>
-          ) : animals.length === 0 ? (
-            <p className="text-gray-500">
-              No hay animales activos disponibles para venta.
-            </p>
-          ) : filteredAnimals.length === 0 ? (
-            <div className="border rounded-lg p-6 text-center text-gray-500">
-              No se encontraron animales con esos filtros.
-            </div>
-          ) : (
-            <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="p-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={allFilteredSelected}
-                        onChange={toggleSelectAll}
-                      />
-                    </th>
-
-                    <th className="p-3 text-left">Arete</th>
-
-                    <th className="p-3 text-left">Nombre</th>
-
-                    <th className="p-3 text-left">Sexo</th>
-
-                    <th className="p-3 text-left">Categoría</th>
-
-                    <th className="p-3 text-left">Peso actual</th>
-
-                    <th className="p-3 text-left">Peso venta</th>
-
-                    {form.tipo_venta === "Canal" && (
-                      <th className="p-3 text-left">Rendimiento %</th>
-                    )}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredAnimals.map((animal) => {
-                    const selected = getSelectedAnimal(animal.id);
-
-                    return (
-                      <tr
-                        key={animal.id}
-                        className={`border-t ${
-                          selected ? "bg-blue-50" : "hover:bg-gray-50"
-                        }`}
-                      >
-                        <td className="p-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={!!selected}
-                            onChange={() => toggleAnimal(animal)}
-                          />
-                        </td>
-
-                        <td className="p-3 font-bold">{animal.arete}</td>
-
-                        <td className="p-3">{animal.nombre || "-"}</td>
-
-                        <td className="p-3">{animal.sexo}</td>
-
-                        <td className="p-3">{animal.categoria}</td>
-
-                        <td className="p-3">
-                          {animal.peso_actual
-                            ? `${animal.peso_actual} kg`
-                            : "-"}
-                        </td>
-
-                        <td className="p-3">
-                          {selected && (
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              value={selected.peso_venta_kg}
-                              onChange={(e) =>
-                                updateSelectedAnimal(
-                                  animal.id,
-                                  "peso_venta_kg",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-32 border rounded p-1"
-                            />
-                          )}
-                        </td>
-
-                        {form.tipo_venta === "Canal" && (
-                          <td className="p-3">
-                            {selected && (
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="100"
-                                value={selected.rendimiento_canal}
-                                onChange={(e) =>
-                                  updateSelectedAnimal(
-                                    animal.id,
-                                    "rendimiento_canal",
-                                    e.target.value,
-                                  )
-                                }
-                                className="w-28 border rounded p-1"
-                                placeholder="%"
-                              />
-                            )}
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ======================================
-            RESUMEN
-        ====================================== */}
-
-        <div className="grid md:grid-cols-3 gap-4 mt-6">
-          <div className="bg-gray-100 rounded-lg p-4">
-            <p className="text-sm text-gray-500">Animales seleccionados</p>
-
-            <p className="text-2xl font-bold">{selectedAnimals.length}</p>
-          </div>
-
-          <div className="bg-gray-100 rounded-lg p-4">
-            <p className="text-sm text-gray-500">Peso total</p>
-
-            <p className="text-2xl font-bold">{totalPeso.toFixed(2)} kg</p>
-          </div>
-
-          <div className="bg-green-100 rounded-lg p-4">
-            <p className="text-sm text-gray-600">Ingreso total</p>
-
-            <p className="text-2xl font-bold text-green-700">
-              ${ingresoTotal.toFixed(2)}
-            </p>
-          </div>
-        </div>
-
-        {/* ======================================
-            NOTAS
-        ====================================== */}
-
-        <div className="mt-5">
           <label className="block text-sm font-bold mb-1">Notas</label>
 
           <textarea
             name="notas"
             value={form.notas}
             onChange={handleFormChange}
-            rows="3"
-            className="w-full border rounded-lg p-2"
+            rows="2"
             placeholder="Observaciones de la venta..."
+            className="w-full border rounded p-2"
           />
         </div>
+      </div>
 
-        {/* BOTON */}
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="mt-5 px-6 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? "Registrando..." : "Registrar venta"}
-        </button>
-      </form>
-
-      {/* ======================================
-          HISTORIAL
-      ====================================== */}
-
+      {/* SELECCION DE ANIMALES */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-5">Historial de ventas</h2>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <h2 className="text-xl font-bold">Seleccionar animales</h2>
 
-        {sales.length === 0 ? (
-          <p className="text-gray-500">No hay ventas registradas.</p>
-        ) : (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={selectAllFiltered}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Seleccionar filtrados
+            </button>
+
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="px-4 py-2 border rounded hover:bg-gray-100"
+            >
+              Limpiar
+            </button>
+          </div>
+        </div>
+
+        {/* BUSQUEDA */}
+        <div className="grid md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-bold mb-1">
+              Buscar animal
+            </label>
+
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por arete o nombre..."
+              className="w-full border rounded p-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold mb-1">Categoría</label>
+
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full border rounded p-2"
+            >
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-3 text-sm text-gray-500">
+          Mostrando {filteredAnimals.length} animales disponibles
+        </div>
+
+        {/* TABLA ANIMALES */}
+        <div className="overflow-x-auto border rounded">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-3 text-left">Seleccionar</th>
+
+                <th className="p-3 text-left">Arete</th>
+
+                <th className="p-3 text-left">Nombre</th>
+
+                <th className="p-3 text-left">Sexo</th>
+
+                <th className="p-3 text-left">Categoría</th>
+
+                <th className="p-3 text-left">Peso actual</th>
+
+                <th className="p-3 text-left">Peso nacimiento</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredAnimals.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="p-6 text-center text-gray-500">
+                    No hay animales disponibles.
+                  </td>
+                </tr>
+              ) : (
+                filteredAnimals.map((animal) => {
+                  const selected = selectedAnimals.some(
+                    (item) => item.id === animal.id,
+                  );
+
+                  return (
+                    <tr
+                      key={animal.id}
+                      className={`border-t ${
+                        selected ? "bg-blue-50" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleAnimal(animal)}
+                          className="w-5 h-5"
+                        />
+                      </td>
+
+                      <td className="p-3 font-bold">{animal.arete}</td>
+
+                      <td className="p-3">{animal.nombre || "-"}</td>
+
+                      <td className="p-3">{animal.sexo}</td>
+
+                      <td className="p-3">{animal.categoria}</td>
+
+                      <td className="p-3">
+                        {animal.peso_actual ? `${animal.peso_actual} kg` : "-"}
+                      </td>
+
+                      <td className="p-3">
+                        {animal.peso_nacimiento
+                          ? `${animal.peso_nacimiento} kg`
+                          : "-"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* DETALLE DE ANIMALES SELECCIONADOS */}
+      {selectedAnimals.length > 0 && (
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white rounded-lg shadow p-6"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">Detalle de la venta</h2>
+
+            <div className="text-lg font-bold text-green-700">
+              Total: $
+              {getTotalSale().toLocaleString("es-VE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="p-3 text-left">Fecha</th>
+                  <th className="p-3 text-left">Arete</th>
 
-                  <th className="p-3 text-left">Comprador</th>
+                  <th className="p-3 text-left">Edad</th>
 
-                  <th className="p-3 text-left">Tipo</th>
+                  <th className="p-3 text-left">Peso nac.</th>
 
-                  <th className="p-3 text-left">Animales</th>
+                  <th className="p-3 text-left">Peso venta</th>
 
-                  <th className="p-3 text-left">Peso</th>
+                  <th className="p-3 text-left">Peso ganado</th>
+
+                  <th className="p-3 text-left">Ganancia/día</th>
 
                   <th className="p-3 text-left">Precio/kg</th>
 
-                  <th className="p-3 text-left">Total</th>
+                  {form.tipo_venta === "Canal" && (
+                    <th className="p-3 text-left">Rendimiento %</th>
+                  )}
+
+                  <th className="p-3 text-left">Ingreso</th>
                 </tr>
               </thead>
 
               <tbody>
-                {sales.map((sale) => {
-                  const saleAnimals = sale.sale_animals || [];
+                {selectedAnimals.map((animal) => {
+                  const data = saleData[animal.id];
 
-                  const peso = saleAnimals.reduce(
-                    (total, item) => total + Number(item.peso_venta_kg),
-                    0,
-                  );
+                  const pesoGanado = getWeightGain(animal);
+
+                  const gananciaDiaria = getDailyGain(animal);
+
+                  const ingreso =
+                    data?.peso_venta_kg && data?.precio_kg
+                      ? Number(data.peso_venta_kg) * Number(data.precio_kg)
+                      : 0;
 
                   return (
-                    <tr key={sale.id} className="border-t hover:bg-gray-50">
-                      <td className="p-3">{sale.fecha_venta}</td>
-
-                      <td className="p-3">{sale.comprador || "-"}</td>
-
-                      <td className="p-3">{sale.tipo_venta}</td>
-
-                      <td className="p-3">{saleAnimals.length}</td>
-
-                      <td className="p-3">{peso.toFixed(2)} kg</td>
+                    <tr key={animal.id} className="border-t">
+                      <td className="p-3 font-bold">{animal.arete}</td>
 
                       <td className="p-3">
-                        ${Number(sale.precio_kg).toFixed(2)}
+                        {data?.edad_dias != null
+                          ? `${data.edad_dias} días`
+                          : "-"}
                       </td>
 
+                      <td className="p-3">
+                        {animal.peso_nacimiento
+                          ? `${animal.peso_nacimiento} kg`
+                          : "-"}
+                      </td>
+
+                      <td className="p-3">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={data?.peso_venta_kg ?? ""}
+                          onChange={(e) =>
+                            updateSaleData(
+                              animal.id,
+                              "peso_venta_kg",
+                              e.target.value,
+                            )
+                          }
+                          className="w-28 border rounded p-2"
+                          required
+                        />
+                      </td>
+
+                      <td className="p-3">
+                        {pesoGanado !== null
+                          ? `${pesoGanado.toFixed(2)} kg`
+                          : "-"}
+                      </td>
+
+                      <td className="p-3">
+                        {gananciaDiaria !== null
+                          ? `${gananciaDiaria.toFixed(3)} kg/día`
+                          : "-"}
+                      </td>
+
+                      <td className="p-3">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={data?.precio_kg ?? ""}
+                          onChange={(e) =>
+                            updateSaleData(
+                              animal.id,
+                              "precio_kg",
+                              e.target.value,
+                            )
+                          }
+                          className="w-28 border rounded p-2"
+                          required
+                        />
+                      </td>
+
+                      {form.tipo_venta === "Canal" && (
+                        <td className="p-3">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={data?.rendimiento_canal ?? ""}
+                            onChange={(e) =>
+                              updateSaleData(
+                                animal.id,
+                                "rendimiento_canal",
+                                e.target.value,
+                              )
+                            }
+                            className="w-24 border rounded p-2"
+                          />
+                        </td>
+                      )}
+
                       <td className="p-3 font-bold">
-                        ${Number(sale.ingreso_total).toFixed(2)}
+                        $
+                        {ingreso.toLocaleString("es-VE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="flex justify-end mt-6">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-8 py-3 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 disabled:opacity-50"
+            >
+              {saving
+                ? "Registrando venta..."
+                : `Registrar venta de ${selectedAnimals.length} animal${
+                    selectedAnimals.length === 1 ? "" : "es"
+                  }`}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* HISTORIAL */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-bold mb-4">Historial de ventas</h2>
+
+        {batches.length === 0 ? (
+          <p className="text-gray-500">Todavía no hay ventas registradas.</p>
+        ) : (
+          <div className="space-y-3">
+            {batches.map((batch) => (
+              <div key={batch.id} className="border rounded-lg p-4">
+                <div className="flex flex-col md:flex-row md:justify-between gap-2">
+                  <div>
+                    <p className="font-bold">{batch.fecha_venta}</p>
+
+                    <p className="text-sm text-gray-600">
+                      Comprador: {batch.comprador || "No especificado"}
+                    </p>
+
+                    <p className="text-sm text-gray-600">
+                      Animales: {batch.sales?.length || 0}
+                    </p>
+                  </div>
+
+                  <div className="font-bold text-green-700">
+                    $
+                    {Number(batch.ingreso_total || 0).toLocaleString("es-VE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
