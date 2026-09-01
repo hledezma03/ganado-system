@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React from "react";
+import { Link } from "react-router-dom";
 
 export default function Navbar() {
   return (
@@ -8,7 +8,7 @@ export default function Navbar() {
         <Link to="/" className="text-2xl font-bold">
           🐄 Ganado System
         </Link>
-        
+
         <div className="flex gap-6">
           <Link to="/animals" className="hover:bg-blue-700 px-3 py-2 rounded">
             Animales
@@ -18,6 +18,9 @@ export default function Navbar() {
           </Link>
           <Link to="/expenses" className="hover:bg-blue-700 px-3 py-2 rounded">
             Gastos
+          </Link>
+          <Link to="/sales" className="hover:bg-blue-700 px-3 py-2 rounded">
+            Ventas
           </Link>
           <Link to="/reports" className="hover:bg-blue-700 px-3 py-2 rounded">
             Reportes

@@ -81,4 +81,13 @@ export const reportService = {
   getFinancialSummary: () => api.get("/reports/financial-summary"),
 };
 
+// Sales
+export const saleService = {
+  create: (data) => api.post("/sales", data),
+
+  getAll: () => api.get("/sales"),
+
+  getById: (id) => api.get(`/sales/${id}`),
+};
+
 export default api;
