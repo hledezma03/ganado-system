@@ -64,7 +64,6 @@ const calculateCategory = ({
   return categoriaActual || "Becerro";
 };
 
-
 // ============================================================
 // SINCRONIZAR CATEGORÍA + HISTORIAL
 // ============================================================
@@ -128,7 +127,6 @@ const syncAnimalCategory = async (animal) => {
   return nuevaCategoria;
 };
 
-
 // ============================================================
 // CREAR ANIMAL
 // ============================================================
@@ -187,8 +185,7 @@ exports.createAnimal = async (req, res) => {
 
       color: color || null,
 
-      senales_particulares:
-        senales_particulares || senales || null,
+      senales_particulares: senales_particulares || senales || null,
 
       id_madre: id_madre || null,
 
@@ -199,16 +196,13 @@ exports.createAnimal = async (req, res) => {
       potrero: potrero || null,
 
       peso_actual:
-        peso_actual !== undefined &&
-        peso_actual !== null &&
-        peso_actual !== ""
+        peso_actual !== undefined && peso_actual !== null && peso_actual !== ""
           ? Number(peso_actual)
           : null,
 
       finalidad: finalidad || null,
 
-      condicion_reproductiva:
-        condicion_reproductiva || null,
+      condicion_reproductiva: condicion_reproductiva || null,
     };
 
     console.log("Creando animal:", animal);
@@ -232,8 +226,7 @@ exports.createAnimal = async (req, res) => {
           id_animal: data.id,
           categoria: data.categoria,
           fecha_inicio:
-            data.fecha_nacimiento ||
-            new Date().toISOString().split("T")[0],
+            data.fecha_nacimiento || new Date().toISOString().split("T")[0],
           fecha_fin: null,
           motivo: "Registro inicial",
         });
@@ -241,7 +234,7 @@ exports.createAnimal = async (req, res) => {
       if (historyError) {
         console.error(
           "Error registrando historial de categoría:",
-          historyError
+          historyError,
         );
       }
     }
@@ -258,7 +251,6 @@ exports.createAnimal = async (req, res) => {
     });
   }
 };
-
 
 // ============================================================
 // OBTENER TODOS
@@ -284,7 +276,6 @@ exports.getAnimals = async (req, res) => {
     });
   }
 };
-
 
 // ============================================================
 // OBTENER POR ID
@@ -314,7 +305,6 @@ exports.getAnimal = async (req, res) => {
   }
 };
 
-
 // ============================================================
 // ACTUALIZAR ANIMAL
 // ============================================================
@@ -343,12 +333,11 @@ exports.updateAnimal = async (req, res) => {
     } = req.body;
 
     // Obtener animal actual
-    const { data: currentAnimal, error: currentError } =
-      await supabase
-        .from("animals")
-        .select("*")
-        .eq("id", id)
-        .single();
+    const { data: currentAnimal, error: currentError } = await supabase
+      .from("animals")
+      .select("*")
+      .eq("id", id)
+      .single();
 
     if (currentError) {
       throw currentError;
@@ -359,27 +348,19 @@ exports.updateAnimal = async (req, res) => {
     const fechaNacimientoFinal =
       fecha_nacimiento ?? currentAnimal.fecha_nacimiento;
 
-    const finalidadFinal =
-      finalidad ?? currentAnimal.finalidad;
+    const finalidadFinal = finalidad ?? currentAnimal.finalidad;
 
     const categoriaNueva = calculateCategory({
       sexo: sexoFinal,
       fecha_nacimiento: fechaNacimientoFinal,
       finalidad: finalidadFinal,
-      categoriaActual:
-        categoria ?? currentAnimal.categoria,
+      categoriaActual: categoria ?? currentAnimal.categoria,
     });
 
     const updateData = {
-      arete:
-        arete !== undefined
-          ? String(arete).trim()
-          : currentAnimal.arete,
+      arete: arete !== undefined ? String(arete).trim() : currentAnimal.arete,
 
-      nombre:
-        nombre !== undefined
-          ? nombre || null
-          : currentAnimal.nombre,
+      nombre: nombre !== undefined ? nombre || null : currentAnimal.nombre,
 
       sexo: sexoFinal,
 
@@ -390,15 +371,9 @@ exports.updateAnimal = async (req, res) => {
 
       categoria: categoriaNueva,
 
-      raza:
-        raza !== undefined
-          ? raza || null
-          : currentAnimal.raza,
+      raza: raza !== undefined ? raza || null : currentAnimal.raza,
 
-      color:
-        color !== undefined
-          ? color || null
-          : currentAnimal.color,
+      color: color !== undefined ? color || null : currentAnimal.color,
 
       senales_particulares:
         senales_particulares !== undefined
@@ -408,19 +383,12 @@ exports.updateAnimal = async (req, res) => {
             : currentAnimal.senales_particulares,
 
       id_madre:
-        id_madre !== undefined
-          ? id_madre || null
-          : currentAnimal.id_madre,
+        id_madre !== undefined ? id_madre || null : currentAnimal.id_madre,
 
       id_padre:
-        id_padre !== undefined
-          ? id_padre || null
-          : currentAnimal.id_padre,
+        id_padre !== undefined ? id_padre || null : currentAnimal.id_padre,
 
-      potrero:
-        potrero !== undefined
-          ? potrero || null
-          : currentAnimal.potrero,
+      potrero: potrero !== undefined ? potrero || null : currentAnimal.potrero,
 
       peso_actual:
         peso_actual !== undefined
@@ -430,19 +398,14 @@ exports.updateAnimal = async (req, res) => {
           : currentAnimal.peso_actual,
 
       finalidad:
-        finalidad !== undefined
-          ? finalidad || null
-          : currentAnimal.finalidad,
+        finalidad !== undefined ? finalidad || null : currentAnimal.finalidad,
 
       condicion_reproductiva:
         condicion_reproductiva !== undefined
           ? condicion_reproductiva || null
           : currentAnimal.condicion_reproductiva,
 
-      estado:
-        estado !== undefined
-          ? estado
-          : currentAnimal.estado,
+      estado: estado !== undefined ? estado : currentAnimal.estado,
 
       updated_at: new Date().toISOString(),
     };
@@ -459,9 +422,7 @@ exports.updateAnimal = async (req, res) => {
     }
 
     // Si cambió la categoría, registrar historial
-    if (
-      currentAnimal.categoria !== categoriaNueva
-    ) {
+    if (currentAnimal.categoria !== categoriaNueva) {
       await syncAnimalCategory({
         ...currentAnimal,
         ...data,
@@ -482,7 +443,6 @@ exports.updateAnimal = async (req, res) => {
   }
 };
 
-
 // ============================================================
 // CAMBIAR ESTADO
 // ============================================================
@@ -492,12 +452,7 @@ exports.updateAnimalStatus = async (req, res) => {
     const { id } = req.params;
     const { estado } = req.body;
 
-    const estadosPermitidos = [
-      "Activo",
-      "Vendido",
-      "Muerto",
-      "Desaparecido",
-    ];
+    const estadosPermitidos = ["Activo", "Vendido", "Muerto", "Desaparecido"];
 
     if (!estadosPermitidos.includes(estado)) {
       return res.status(400).json({
@@ -531,7 +486,6 @@ exports.updateAnimalStatus = async (req, res) => {
     });
   }
 };
-
 
 // ============================================================
 // DELETE NORMAL
@@ -574,7 +528,6 @@ exports.deleteAnimal = async (req, res) => {
   }
 };
 
-
 // ============================================================
 // ELIMINACIÓN PERMANENTE
 // ============================================================
@@ -587,22 +540,18 @@ exports.deleteAnimalPermanent = async (req, res) => {
     const { id } = req.params;
 
     // Verificar que existe
-    const { data: animal, error: findError } =
-      await supabase
-        .from("animals")
-        .select("id, arete, nombre")
-        .eq("id", id)
-        .single();
+    const { data: animal, error: findError } = await supabase
+      .from("animals")
+      .select("id, arete, nombre")
+      .eq("id", id)
+      .single();
 
     if (findError) {
       throw findError;
     }
 
     // Eliminar físicamente
-    const { error } = await supabase
-      .from("animals")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("animals").delete().eq("id", id);
 
     if (error) {
       throw error;
@@ -613,10 +562,7 @@ exports.deleteAnimalPermanent = async (req, res) => {
       message: `Animal ${animal.arete} eliminado permanentemente`,
     });
   } catch (err) {
-    console.error(
-      "deleteAnimalPermanent:",
-      err
-    );
+    console.error("deleteAnimalPermanent:", err);
 
     res.status(400).json({
       error: err.message,
@@ -624,24 +570,24 @@ exports.deleteAnimalPermanent = async (req, res) => {
   }
 };
 
-
 // ============================================================
 // SINCRONIZAR CATEGORÍAS
 // ============================================================
 
 exports.syncCategories = async (req, res) => {
   try {
-    const { data: animals, error } =
-      await supabase
-        .from("animals")
-        .select(`
+    const { data: animals, error } = await supabase
+      .from("animals")
+      .select(
+        `
           id,
           sexo,
           fecha_nacimiento,
           finalidad,
           categoria
-        `)
-        .eq("estado", "Activo");
+        `,
+      )
+      .eq("estado", "Activo");
 
     if (error) {
       throw error;
@@ -650,34 +596,97 @@ exports.syncCategories = async (req, res) => {
     let actualizados = 0;
 
     for (const animal of animals) {
-      const categoriaAnterior =
-        animal.categoria;
+      const categoriaAnterior = animal.categoria;
 
-      const categoriaNueva =
-        await syncAnimalCategory(animal);
+      const categoriaNueva = await syncAnimalCategory(animal);
 
-      if (
-        categoriaNueva !==
-        categoriaAnterior
-      ) {
+      if (categoriaNueva !== categoriaAnterior) {
         actualizados++;
       }
     }
 
     return res.json({
       success: true,
-      animales_revisados:
-        animals.length,
-      categorias_actualizadas:
-        actualizados,
+      animales_revisados: animals.length,
+      categorias_actualizadas: actualizados,
     });
   } catch (err) {
-    console.error(
-      "syncCategories:",
-      err
-    );
+    console.error("syncCategories:", err);
 
     return res.status(400).json({
+      error: err.message,
+    });
+  }
+};
+
+// Registrar baja de un animal
+exports.registerDischarge = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fecha_baja, motivo, notas } = req.body;
+
+    if (!fecha_baja) {
+      return res.status(400).json({
+        error: "La fecha de baja es obligatoria",
+      });
+    }
+
+    if (!["Muerto", "Desaparecido"].includes(motivo)) {
+      return res.status(400).json({
+        error: "Motivo de baja inválido",
+      });
+    }
+
+    const { data: animal, error: animalError } = await supabase
+      .from("animals")
+      .select("id, estado")
+      .eq("id", id)
+      .single();
+
+    if (animalError) throw animalError;
+
+    if (animal.estado !== "Activo") {
+      return res.status(400).json({
+        error: "Solo se puede dar de baja un animal activo",
+      });
+    }
+
+    const { data: baja, error: bajaError } = await supabase
+      .from("animal_bajas")
+      .insert([
+        {
+          id_animal: id,
+          fecha_baja,
+          motivo,
+          notas: notas || null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (bajaError) throw bajaError;
+
+    const nuevoEstado = motivo === "Muerto" ? "Muerto" : "Desaparecido";
+
+    const { error: updateError } = await supabase
+      .from("animals")
+      .update({
+        estado: nuevoEstado,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (updateError) throw updateError;
+
+    res.status(201).json({
+      success: true,
+      baja,
+      estado: nuevoEstado,
+    });
+  } catch (err) {
+    console.error("Error registrando baja:", err);
+
+    res.status(400).json({
       error: err.message,
     });
   }

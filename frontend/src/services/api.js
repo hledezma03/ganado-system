@@ -39,6 +39,11 @@ export const animalService = {
     });
     return response.data;
   },
+  
+  registerDischarge: async (id, data) => {
+    const response = await api.post(`/animals/${id}/discharge`, data);
+    return response.data;
+  },
 
   syncCategories: async () => {
     const response = await api.post("/animals/sync-categories");

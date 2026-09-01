@@ -9,6 +9,13 @@ export default function AnimalsPage() {
   const [loading, setLoading] = useState(true);
 
   const [editingAnimal, setEditingAnimal] = useState(null);
+  const [dischargeAnimal, setDischargeAnimal] = useState(null);
+
+  const [dischargeForm, setDischargeForm] = useState({
+    fecha_baja: new Date().toISOString().split("T")[0],
+    motivo: "Muerto",
+    notas: "",
+  });
 
   const [search, setSearch] = useState("");
   const [filterSexo, setFilterSexo] = useState("Todos");
@@ -28,12 +35,15 @@ export default function AnimalsPage() {
       setAnimals(Array.isArray(data) ? data : data?.data || []);
     } catch (err) {
       console.error(err);
-
       toast.error("Error cargando animales");
     } finally {
       setLoading(false);
     }
   };
+
+  // ============================================================
+  // CATEGORÍAS
+  // ============================================================
 
   const handleSyncCategories = async () => {
     try {
@@ -53,6 +63,10 @@ export default function AnimalsPage() {
     }
   };
 
+  // ============================================================
+  // CAMBIO DE ESTADO
+  // ============================================================
+
   const handleStatusChange = async (animal, estado) => {
     try {
       await animalService.updateStatus(animal.id, estado);
@@ -67,6 +81,65 @@ export default function AnimalsPage() {
     }
   };
 
+  // ============================================================
+  // MODAL DE BAJA
+  // ============================================================
+
+  const openDischargeModal = (animal) => {
+    setDischargeAnimal(animal);
+
+    setDischargeForm({
+      fecha_baja: new Date().toISOString().split("T")[0],
+      motivo: "Muerto",
+      notas: "",
+    });
+  };
+
+  const closeDischargeModal = () => {
+    setDischargeAnimal(null);
+
+    setDischargeForm({
+      fecha_baja: new Date().toISOString().split("T")[0],
+      motivo: "Muerto",
+      notas: "",
+    });
+  };
+
+  const handleDischargeSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!dischargeAnimal) return;
+
+    if (!dischargeForm.fecha_baja) {
+      toast.error("Selecciona la fecha de baja");
+      return;
+    }
+
+    try {
+      await animalService.registerDischarge(dischargeAnimal.id, {
+        fecha_baja: dischargeForm.fecha_baja,
+        motivo: dischargeForm.motivo,
+        notas: dischargeForm.notas.trim() || null,
+      });
+
+      toast.success(
+        `Animal ${dischargeAnimal.arete} marcado como ${dischargeForm.motivo}`,
+      );
+
+      closeDischargeModal();
+
+      await fetchAnimals();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(err?.response?.data?.error || "Error registrando la baja");
+    }
+  };
+
+  // ============================================================
+  // ELIMINACIÓN PERMANENTE
+  // ============================================================
+
   const handlePermanentDelete = async (animal) => {
     const confirmed = window.confirm(
       `⚠️ ELIMINACIÓN PERMANENTE\n\n` +
@@ -74,9 +147,8 @@ export default function AnimalsPage() {
         `Nombre: ${animal.nombre || "Sin nombre"}\n\n` +
         `Esta acción eliminará definitivamente ` +
         `el animal y sus datos relacionados.\n\n` +
-        `Esta opción debe utilizarse únicamente ` +
-        `para datos de prueba o registros creados ` +
-        `por error.\n\n` +
+        `Utiliza esta opción únicamente para datos de prueba ` +
+        `o registros creados por error.\n\n` +
         `¿Deseas continuar?`,
     );
 
@@ -96,6 +168,10 @@ export default function AnimalsPage() {
       );
     }
   };
+
+  // ============================================================
+  // FILTROS
+  // ============================================================
 
   const filteredAnimals = useMemo(() => {
     const text = search.trim().toLowerCase();
@@ -121,6 +197,10 @@ export default function AnimalsPage() {
       return matchesSearch && matchesSexo && matchesCategoria && matchesEstado;
     });
   }, [animals, search, filterSexo, filterCategoria, filterEstado]);
+
+  // ============================================================
+  // ESTILOS
+  // ============================================================
 
   const getStatusClass = (estado) => {
     switch (estado) {
@@ -165,6 +245,10 @@ export default function AnimalsPage() {
         return "bg-gray-100 text-gray-700";
     }
   };
+
+  // ============================================================
+  // RENDER
+  // ============================================================
 
   return (
     <div className="space-y-6">
@@ -216,9 +300,7 @@ export default function AnimalsPage() {
             className="border border-gray-300 rounded-lg p-2"
           >
             <option value="Todos">Todos los sexos</option>
-
             <option value="Macho">Machos</option>
-
             <option value="Hembra">Hembras</option>
           </select>
 
@@ -228,17 +310,11 @@ export default function AnimalsPage() {
             className="border border-gray-300 rounded-lg p-2"
           >
             <option value="Todas">Todas las categorías</option>
-
             <option value="Becerro">Becerro</option>
-
             <option value="Maute">Maute</option>
-
             <option value="Novilla">Novilla</option>
-
             <option value="Vaca">Vaca</option>
-
             <option value="Toro">Toro</option>
-
             <option value="Novillo">Novillo</option>
           </select>
 
@@ -248,13 +324,9 @@ export default function AnimalsPage() {
             className="border border-gray-300 rounded-lg p-2"
           >
             <option value="Todos">Todos los estados</option>
-
             <option value="Activo">Activos</option>
-
             <option value="Vendido">Vendidos</option>
-
             <option value="Muerto">Muertos</option>
-
             <option value="Desaparecido">Desaparecidos</option>
           </select>
         </div>
@@ -274,17 +346,11 @@ export default function AnimalsPage() {
               <thead className="bg-gray-100">
                 <tr>
                   <th className="p-3 text-left">Arete</th>
-
                   <th className="p-3 text-left">Nombre</th>
-
                   <th className="p-3 text-left">Sexo</th>
-
                   <th className="p-3 text-left">Categoría</th>
-
                   <th className="p-3 text-left">Peso</th>
-
                   <th className="p-3 text-left">Estado</th>
-
                   <th className="p-3 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -323,7 +389,7 @@ export default function AnimalsPage() {
                     </td>
 
                     <td className="p-3">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2 flex-wrap">
                         <button
                           type="button"
                           onClick={() => setEditingAnimal(animal)}
@@ -332,7 +398,7 @@ export default function AnimalsPage() {
                           Editar
                         </button>
 
-                        {animal.estado === "Desaparecido" ? (
+                        {animal.estado === "Desaparecido" && (
                           <button
                             type="button"
                             onClick={() => handleStatusChange(animal, "Activo")}
@@ -340,12 +406,12 @@ export default function AnimalsPage() {
                           >
                             Recuperar
                           </button>
-                        ) : (
+                        )}
+
+                        {animal.estado === "Activo" && (
                           <button
                             type="button"
-                            onClick={() =>
-                              handleStatusChange(animal, "Desaparecido")
-                            }
+                            onClick={() => openDischargeModal(animal)}
                             className="px-3 py-1 bg-orange-500 text-white rounded hover:bg-orange-600"
                           >
                             Dar de baja
@@ -379,6 +445,102 @@ export default function AnimalsPage() {
           onClose={() => setEditingAnimal(null)}
           onSuccess={fetchAnimals}
         />
+      )}
+
+      {/* MODAL DAR DE BAJA */}
+      {dischargeAnimal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">
+                Dar de baja animal
+              </h2>
+
+              <p className="text-sm text-gray-500 mt-1">
+                Arete: <strong>{dischargeAnimal.arete}</strong>
+              </p>
+
+              {dischargeAnimal.nombre && (
+                <p className="text-sm text-gray-500">
+                  Nombre: {dischargeAnimal.nombre}
+                </p>
+              )}
+            </div>
+
+            <form onSubmit={handleDischargeSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-1">
+                  Fecha de baja *
+                </label>
+
+                <input
+                  type="date"
+                  value={dischargeForm.fecha_baja}
+                  onChange={(e) =>
+                    setDischargeForm((prev) => ({
+                      ...prev,
+                      fecha_baja: e.target.value,
+                    }))
+                  }
+                  required
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold mb-1">Motivo *</label>
+
+                <select
+                  value={dischargeForm.motivo}
+                  onChange={(e) =>
+                    setDischargeForm((prev) => ({
+                      ...prev,
+                      motivo: e.target.value,
+                    }))
+                  }
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                >
+                  <option value="Muerto">Muerto</option>
+                  <option value="Desaparecido">Desaparecido</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold mb-1">Notas</label>
+
+                <textarea
+                  value={dischargeForm.notas}
+                  onChange={(e) =>
+                    setDischargeForm((prev) => ({
+                      ...prev,
+                      notas: e.target.value,
+                    }))
+                  }
+                  rows="3"
+                  placeholder="Observaciones..."
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeDischargeModal}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                >
+                  Confirmar baja
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
