@@ -24,7 +24,7 @@ app.use('/api/weights', require('./routes/weights'));
 app.use('/api/reproduction', require('./routes/reproduction'));
 app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/reports', require('./routes/reports'));
-app.use("/api/sales", saleRoutes, require('./routes/sales'));
+app.use("/api/sales", require('./routes/sales'));
 
 // 404 handler
 app.use((req, res) => {
