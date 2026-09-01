@@ -39,7 +39,7 @@ export const animalService = {
     });
     return response.data;
   },
-  
+
   registerDischarge: async (id, data) => {
     const response = await api.post(`/animals/${id}/discharge`, data);
     return response.data;
@@ -60,9 +60,15 @@ export const animalService = {
 // WEIGHTS
 // ===============================
 export const weightService = {
-  record: (data) => api.post("/weights", data),
+  record: async (data) => {
+    const response = await api.post("/weights", data);
+    return response.data;
+  },
 
-  getHistory: (animalId) => api.get(`/weights/${animalId}`),
+  getHistory: async (id_animal) => {
+    const response = await api.get(`/weights/${id_animal}`);
+    return response.data;
+  },
 };
 
 // ===============================
