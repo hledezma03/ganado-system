@@ -54,6 +54,61 @@ const calculateCategory = ({
   return categoriaActual || "Becerro";
 };
 
+const syncAnimalCategory = async (animal) => {
+  const nuevaCategoria = calculateCategory({
+    sexo: animal.sexo,
+    fecha_nacimiento: animal.fecha_nacimiento,
+    finalidad: animal.finalidad,
+    categoriaActual: animal.categoria
+  });
+
+  if (!nuevaCategoria || nuevaCategoria === animal.categoria) {
+    return animal.categoria;
+  }
+
+  const hoy = new Date().toISOString().split('T')[0];
+
+  const { error: closeError } = await supabase
+    .from('animal_category_history')
+    .update({
+      fecha_fin: hoy
+    })
+    .eq('id_animal', animal.id)
+    .is('fecha_fin', null);
+
+  if (closeError) {
+    throw closeError;
+  }
+
+  const { error: historyError } = await supabase
+    .from('animal_category_history')
+    .insert({
+      id_animal: animal.id,
+      categoria: nuevaCategoria,
+      fecha_inicio: hoy,
+      fecha_fin: null,
+      motivo: 'Actualización automática'
+    });
+
+  if (historyError) {
+    throw historyError;
+  }
+
+  const { error: animalError } = await supabase
+    .from('animals')
+    .update({
+      categoria: nuevaCategoria,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', animal.id);
+
+  if (animalError) {
+    throw animalError;
+  }
+
+  return nuevaCategoria;
+};
+
 // Crear animal
 exports.createAnimal = async (req, res) => {
   try {
@@ -377,6 +432,50 @@ exports.deleteAnimalPermanent = async (req, res) => {
     console.error('Error eliminando animal permanentemente:', err);
 
     res.status(400).json({
+      error: err.message
+    });
+  }
+};
+
+exports.syncCategories = async (req, res) => {
+  try {
+    const { data: animals, error } = await supabase
+      .from('animals')
+      .select(`
+        id,
+        sexo,
+        fecha_nacimiento,
+        finalidad,
+        categoria
+      `)
+      .eq('estado', 'Activo');
+
+    if (error) {
+      throw error;
+    }
+
+    let actualizados = 0;
+
+    for (const animal of animals) {
+      const categoriaAnterior = animal.categoria;
+
+      const categoriaNueva = await syncAnimalCategory(animal);
+
+      if (categoriaNueva !== categoriaAnterior) {
+        actualizados++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      animales_revisados: animals.length,
+      categorias_actualizadas: actualizados
+    });
+
+  } catch (err) {
+    console.error('syncCategories:', err);
+
+    return res.status(400).json({
       error: err.message
     });
   }

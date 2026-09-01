@@ -12,11 +12,11 @@ router.get('/:id', animalController.getAnimal);
 
 router.put('/:id', animalController.updateAnimal);
 
-router.patch('/:id/status', animalController.updateAnimalStatus);
-
-router.delete(
-  '/:id/permanent',
-  animalController.deleteAnimalPermanent
+router.post(
+  '/sync-categories',
+  animalController.syncCategories
 );
+
+router.delete('/:id', animalController.deleteAnimal);
 
 module.exports = router;

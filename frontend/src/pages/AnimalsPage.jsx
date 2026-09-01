@@ -62,6 +62,24 @@ export default function AnimalsPage() {
     setNewStatus("");
   };
 
+  const handleSyncCategories = async () => {
+    try {
+      const result = await animalService.syncCategories();
+
+      toast.success(
+        `${result.categorias_actualizadas} categorías actualizadas`,
+      );
+
+      await fetchAnimals();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err?.response?.data?.error || "Error actualizando categorías",
+      );
+    }
+  };
+
   const handleStatusChange = async () => {
     if (!statusAnimal || !newStatus) return;
 
@@ -157,6 +175,14 @@ export default function AnimalsPage() {
                   {animals.length} animales
                 </p>
               </div>
+
+              <button
+                type="button"
+                onClick={handleSyncCategories}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                🔄 Actualizar categorías
+              </button>
 
               <button
                 type="button"
