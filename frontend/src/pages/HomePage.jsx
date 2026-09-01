@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React from "react";
+import { Link } from "react-router-dom";
 
 export default function HomePage() {
   return (
@@ -12,26 +12,47 @@ export default function HomePage() {
           Administra tu hato, registra eventos y optimiza la producción
         </p>
 
-        <div className="grid md:grid-cols-4 gap-6">
-          <Link to="/animals" className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
+        <div className="grid md:grid-cols-5 gap-6">
+          <Link
+            to="/animals"
+            className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition"
+          >
             <div className="text-4xl mb-3">🐄</div>
             <h3 className="text-lg font-bold">Animales</h3>
             <p className="text-sm text-gray-600">Registro de fichas</p>
           </Link>
-          
-          <Link to="/weights" className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
+
+          <Link
+            to="/weights"
+            className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition"
+          >
             <div className="text-4xl mb-3">📊</div>
             <h3 className="text-lg font-bold">Pesajes</h3>
             <p className="text-sm text-gray-600">GDP y evolución</p>
           </Link>
-          
-          <Link to="/expenses" className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
+
+          <Link
+            to="/expenses"
+            className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition"
+          >
             <div className="text-4xl mb-3">💰</div>
             <h3 className="text-lg font-bold">Gastos</h3>
             <p className="text-sm text-gray-600">Control de costos</p>
           </Link>
-          
-          <Link to="/reports" className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
+
+          <Link
+            to="/sales"
+            className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition"
+          >
+            <div className="text-4xl mb-3">🐂</div>
+            <h3 className="text-lg font-bold">Ventas</h3>
+            <p className="text-sm text-gray-600">Ventas de ganado por lote</p>
+          </Link>
+
+          <Link
+            to="/reports"
+            className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition"
+          >
             <div className="text-4xl mb-3">📋</div>
             <h3 className="text-lg font-bold">Reportes</h3>
             <p className="text-sm text-gray-600">Análisis y métricas</p>

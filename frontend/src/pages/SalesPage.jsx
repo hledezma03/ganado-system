@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { animalService, saleService } from "../services/api";
 
@@ -9,9 +9,12 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("Todas");
+  const [sexFilter, setSexFilter] = useState("Todos");
+
   const [form, setForm] = useState({
     fecha_venta: new Date().toISOString().split("T")[0],
-
     comprador: "",
     tipo_venta: "Pie",
     precio_kg: "",
@@ -34,7 +37,6 @@ export default function SalesPage() {
       ]);
 
       const animalsData = animalsResponse.data || animalsResponse;
-
       const salesData = salesResponse.data || salesResponse;
 
       setAnimals(
@@ -46,7 +48,6 @@ export default function SalesPage() {
       setSales(Array.isArray(salesData) ? salesData : []);
     } catch (err) {
       console.error(err);
-
       toast.error("Error cargando información");
     } finally {
       setLoading(false);
@@ -97,6 +98,68 @@ export default function SalesPage() {
   const getSelectedAnimal = (id) =>
     selectedAnimals.find((animal) => animal.id_animal === id);
 
+  // ==========================================
+  // FILTROS
+  // ==========================================
+
+  const filteredAnimals = useMemo(() => {
+    const search = searchTerm.toLowerCase().trim();
+
+    return animals.filter((animal) => {
+      const matchesSearch =
+        !search ||
+        animal.arete?.toLowerCase().includes(search) ||
+        animal.nombre?.toLowerCase().includes(search);
+
+      const matchesCategory =
+        categoryFilter === "Todas" || animal.categoria === categoryFilter;
+
+      const matchesSex = sexFilter === "Todos" || animal.sexo === sexFilter;
+
+      return matchesSearch && matchesCategory && matchesSex;
+    });
+  }, [animals, searchTerm, categoryFilter, sexFilter]);
+
+  // ==========================================
+  // SELECCIONAR TODOS LOS FILTRADOS
+  // ==========================================
+
+  const allFilteredSelected =
+    filteredAnimals.length > 0 &&
+    filteredAnimals.every((animal) =>
+      selectedAnimals.some((selected) => selected.id_animal === animal.id),
+    );
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const filteredIds = new Set(filteredAnimals.map((animal) => animal.id));
+
+      setSelectedAnimals((prev) =>
+        prev.filter((animal) => !filteredIds.has(animal.id_animal)),
+      );
+
+      return;
+    }
+
+    setSelectedAnimals((prev) => {
+      const existingIds = new Set(prev.map((animal) => animal.id_animal));
+
+      const newAnimals = filteredAnimals
+        .filter((animal) => !existingIds.has(animal.id))
+        .map((animal) => ({
+          id_animal: animal.id,
+          peso_venta_kg: animal.peso_actual || "",
+          rendimiento_canal: "",
+        }));
+
+      return [...prev, ...newAnimals];
+    });
+  };
+
+  // ==========================================
+  // RESUMEN
+  // ==========================================
+
   const totalPeso = selectedAnimals.reduce(
     (total, animal) => total + (Number(animal.peso_venta_kg) || 0),
     0,
@@ -104,7 +167,11 @@ export default function SalesPage() {
 
   const precioKg = Number(form.precio_kg) || 0;
 
-  const ingresoEstimado = totalPeso * precioKg;
+  const ingresoTotal = totalPeso * precioKg;
+
+  // ==========================================
+  // REGISTRAR VENTA
+  // ==========================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -133,6 +200,18 @@ export default function SalesPage() {
       return;
     }
 
+    if (form.tipo_venta === "Canal") {
+      const invalidYield = selectedAnimals.some(
+        (animal) =>
+          !animal.rendimiento_canal || Number(animal.rendimiento_canal) <= 0,
+      );
+
+      if (invalidYield) {
+        toast.error("Todos los animales deben tener rendimiento en canal");
+        return;
+      }
+    }
+
     try {
       setSaving(true);
 
@@ -146,7 +225,6 @@ export default function SalesPage() {
 
       setForm({
         fecha_venta: new Date().toISOString().split("T")[0],
-
         comprador: "",
         tipo_venta: "Pie",
         precio_kg: "",
@@ -154,6 +232,10 @@ export default function SalesPage() {
       });
 
       setSelectedAnimals([]);
+
+      setSearchTerm("");
+      setCategoryFilter("Todas");
+      setSexFilter("Todos");
 
       await loadData();
     } catch (err) {
@@ -167,17 +249,26 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-6">
+      {/* ======================================
+          ENCABEZADO
+      ====================================== */}
+
       <div>
         <h1 className="text-3xl font-bold text-blue-900">Ventas de Ganado</h1>
 
         <p className="text-gray-500 mt-1">
-          Registra las ventas por lote y sus animales.
+          Registra las ventas por lote y los animales incluidos.
         </p>
       </div>
 
-      {/* FORMULARIO */}
+      {/* ======================================
+          NUEVA VENTA
+      ====================================== */}
+
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
         <h2 className="text-xl font-bold mb-5">Nueva Venta</h2>
+
+        {/* DATOS GENERALES */}
 
         <div className="grid md:grid-cols-4 gap-4">
           <div>
@@ -241,8 +332,92 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* ANIMALES */}
+        {/* ======================================
+            BUSQUEDA Y FILTROS
+        ====================================== */}
+
         <div className="mt-6">
+          <div className="flex flex-col md:flex-row md:items-end gap-3">
+            {/* BUSCAR */}
+
+            <div className="flex-1">
+              <label className="block text-sm font-bold mb-1">
+                Buscar animal
+              </label>
+
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por arete o nombre..."
+                className="w-full border rounded-lg p-2"
+              />
+            </div>
+
+            {/* CATEGORIA */}
+
+            <div className="md:w-52">
+              <label className="block text-sm font-bold mb-1">Categoría</label>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full border rounded-lg p-2"
+              >
+                <option value="Todas">Todas</option>
+
+                <option value="Becerro">Becerro</option>
+
+                <option value="Maute">Maute</option>
+
+                <option value="Novilla">Novilla</option>
+
+                <option value="Vaca">Vaca</option>
+
+                <option value="Toro">Toro</option>
+
+                <option value="Novillo">Novillo</option>
+              </select>
+            </div>
+
+            {/* SEXO */}
+
+            <div className="md:w-40">
+              <label className="block text-sm font-bold mb-1">Sexo</label>
+
+              <select
+                value={sexFilter}
+                onChange={(e) => setSexFilter(e.target.value)}
+                className="w-full border rounded-lg p-2"
+              >
+                <option value="Todos">Todos</option>
+
+                <option value="Macho">Machos</option>
+
+                <option value="Hembra">Hembras</option>
+              </select>
+            </div>
+          </div>
+
+          {/* CONTADORES */}
+
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-3">
+            <p className="text-sm text-gray-500">
+              Mostrando <strong>{filteredAnimals.length}</strong> de{" "}
+              <strong>{animals.length}</strong> animales activos
+            </p>
+
+            <p className="text-sm font-bold text-blue-700">
+              {selectedAnimals.length} seleccionados
+            </p>
+          </div>
+        </div>
+
+        {/* ======================================
+            ANIMALES
+        ====================================== */}
+
+        <div className="mt-4">
           <h3 className="font-bold mb-3">Seleccionar animales</h3>
 
           {loading ? (
@@ -251,16 +426,28 @@ export default function SalesPage() {
             <p className="text-gray-500">
               No hay animales activos disponibles para venta.
             </p>
+          ) : filteredAnimals.length === 0 ? (
+            <div className="border rounded-lg p-6 text-center text-gray-500">
+              No se encontraron animales con esos filtros.
+            </div>
           ) : (
             <div className="overflow-x-auto border rounded-lg">
               <table className="w-full text-sm">
                 <thead className="bg-gray-100">
                   <tr>
-                    <th className="p-3">✓</th>
+                    <th className="p-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
 
                     <th className="p-3 text-left">Arete</th>
 
                     <th className="p-3 text-left">Nombre</th>
+
+                    <th className="p-3 text-left">Sexo</th>
 
                     <th className="p-3 text-left">Categoría</th>
 
@@ -275,11 +462,16 @@ export default function SalesPage() {
                 </thead>
 
                 <tbody>
-                  {animals.map((animal) => {
+                  {filteredAnimals.map((animal) => {
                     const selected = getSelectedAnimal(animal.id);
 
                     return (
-                      <tr key={animal.id} className="border-t">
+                      <tr
+                        key={animal.id}
+                        className={`border-t ${
+                          selected ? "bg-blue-50" : "hover:bg-gray-50"
+                        }`}
+                      >
                         <td className="p-3 text-center">
                           <input
                             type="checkbox"
@@ -291,6 +483,8 @@ export default function SalesPage() {
                         <td className="p-3 font-bold">{animal.arete}</td>
 
                         <td className="p-3">{animal.nombre || "-"}</td>
+
+                        <td className="p-3">{animal.sexo}</td>
 
                         <td className="p-3">{animal.categoria}</td>
 
@@ -350,7 +544,10 @@ export default function SalesPage() {
           )}
         </div>
 
-        {/* RESUMEN */}
+        {/* ======================================
+            RESUMEN
+        ====================================== */}
+
         <div className="grid md:grid-cols-3 gap-4 mt-6">
           <div className="bg-gray-100 rounded-lg p-4">
             <p className="text-sm text-gray-500">Animales seleccionados</p>
@@ -368,12 +565,15 @@ export default function SalesPage() {
             <p className="text-sm text-gray-600">Ingreso total</p>
 
             <p className="text-2xl font-bold text-green-700">
-              ${ingresoEstimado.toFixed(2)}
+              ${ingresoTotal.toFixed(2)}
             </p>
           </div>
         </div>
 
-        {/* NOTAS */}
+        {/* ======================================
+            NOTAS
+        ====================================== */}
+
         <div className="mt-5">
           <label className="block text-sm font-bold mb-1">Notas</label>
 
@@ -387,6 +587,8 @@ export default function SalesPage() {
           />
         </div>
 
+        {/* BOTON */}
+
         <button
           type="submit"
           disabled={saving}
@@ -396,7 +598,10 @@ export default function SalesPage() {
         </button>
       </form>
 
-      {/* HISTORIAL */}
+      {/* ======================================
+          HISTORIAL
+      ====================================== */}
+
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-xl font-bold mb-5">Historial de ventas</h2>
 
@@ -433,7 +638,7 @@ export default function SalesPage() {
                   );
 
                   return (
-                    <tr key={sale.id} className="border-t">
+                    <tr key={sale.id} className="border-t hover:bg-gray-50">
                       <td className="p-3">{sale.fecha_venta}</td>
 
                       <td className="p-3">{sale.comprador || "-"}</td>
