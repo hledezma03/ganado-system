@@ -30,16 +30,24 @@ export default function SalesPage() {
     try {
       setLoading(true);
 
-      const [animalsResponse, batchesResponse] = await Promise.all([
-        animalService.getAll(),
-        saleService.getBatches(),
-      ]);
+      // Cargar animales independientemente del historial de ventas
+      try {
+        const animalsResponse = await animalService.getAll();
+        setAnimals(animalsResponse || []);
+      } catch (err) {
+        console.error("Error cargando animales:", err);
+        toast.error("Error cargando animales");
+        setAnimals([]);
+      }
 
-      setAnimals(animalsResponse || []);
-      setBatches(batchesResponse || []);
-    } catch (err) {
-      console.error(err);
-      toast.error("Error cargando información de ventas");
+      // El historial de ventas no debe impedir cargar los animales
+      try {
+        const batchesResponse = await saleService.getBatches();
+        setBatches(batchesResponse || []);
+      } catch (err) {
+        console.error("Error cargando historial de ventas:", err);
+        setBatches([]);
+      }
     } finally {
       setLoading(false);
     }

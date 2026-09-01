@@ -180,28 +180,19 @@ exports.getSaleBatches = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("sales_batches")
-      .select(
-        `
-        *,
-        sales (
-          *,
-          animals (
-            id,
-            arete,
-            nombre,
-            sexo,
-            categoria
-          )
-        )
-      `,
-      )
+      .select("*")
       .order("fecha_venta", {
         ascending: false,
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error("Error Supabase obteniendo lotes:", error);
+      return res.status(400).json({
+        error: error.message,
+      });
+    }
 
-    res.json(data);
+    res.json(data || []);
   } catch (err) {
     console.error("Error obteniendo ventas:", err);
 
@@ -218,30 +209,21 @@ exports.getSaleBatch = async (req, res) => {
 
     const { data, error } = await supabase
       .from("sales_batches")
-      .select(
-        `
-        *,
-        sales (
-          *,
-          animals (
-            id,
-            arete,
-            nombre,
-            sexo,
-            categoria,
-            fecha_nacimiento,
-            peso_nacimiento
-          )
-        )
-      `,
-      )
+      .select("*")
       .eq("id", id)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("Error Supabase obteniendo lote:", error);
+      return res.status(400).json({
+        error: error.message,
+      });
+    }
 
     res.json(data);
   } catch (err) {
+    console.error("Error obteniendo lote:", err);
+
     res.status(400).json({
       error: err.message,
     });
