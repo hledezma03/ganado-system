@@ -1,22 +1,30 @@
-const express = require('express');
+const express = require("express");
 
 const router = express.Router();
 
-const animalController = require('../controllers/animalController');
+const animalController = require("../controllers/animalController");
 
-router.post('/', animalController.createAnimal);
+router.post("/", animalController.createAnimal);
 
-router.get('/', animalController.getAnimals);
+router.get("/", animalController.getAnimals);
 
-router.get('/:id', animalController.getAnimal);
+router.get("/:id", animalController.getAnimal);
 
-router.put('/:id', animalController.updateAnimal);
+router.put("/:id", animalController.updateAnimal);
+
+router.patch(
+  "/:id/status",
+  animalController.updateAnimalStatus
+);
 
 router.post(
-  '/sync-categories',
+  "/sync-categories",
   animalController.syncCategories
 );
 
-router.delete('/:id', animalController.deleteAnimal);
+router.delete(
+  "/:id/permanent",
+  animalController.deleteAnimalPermanent
+);
 
 module.exports = router;

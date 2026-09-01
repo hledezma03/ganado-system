@@ -42,7 +42,7 @@ export const animalService = {
     const response = await api.post("/animals/sync-categories");
     return response.data;
   },
-  
+
   deletePermanent: async (id) => {
     const response = await api.delete(`/animals/${id}/permanent`);
     return response.data;

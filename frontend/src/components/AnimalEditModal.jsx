@@ -1,63 +1,61 @@
-import React, { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
-import { animalService } from '../services/api';
-
-const initialForm = {
-  arete: '',
-  nombre: '',
-  sexo: 'Macho',
-  fecha_nacimiento: '',
-  finalidad: '',
-  condicion_reproductiva: '',
-  raza: 'Criollo',
-  color: '',
-  senales_particulares: '',
-  potrero: '',
-  peso_actual: ''
-};
+import React, { useEffect, useState } from "react";
+import toast from "react-hot-toast";
+import { animalService } from "../services/api";
 
 export default function AnimalEditModal({
   animal,
   onClose,
-  onSuccess
+  onSuccess,
 }) {
-  const [form, setForm] = useState(initialForm);
-  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    arete: "",
+    nombre: "",
+    sexo: "Macho",
+    fecha_nacimiento: "",
+    categoria: "Becerro",
+    raza: "Criollo",
+    color: "",
+    senales_particulares: "",
+    potrero: "",
+    peso_actual: "",
+    finalidad: "",
+    condicion_reproductiva: "",
+  });
+
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!animal) return;
 
     setForm({
-      arete: animal.arete || '',
-      nombre: animal.nombre || '',
-      sexo: animal.sexo || 'Macho',
-      fecha_nacimiento: animal.fecha_nacimiento || '',
-      finalidad: animal.finalidad || '',
-      condicion_reproductiva:
-        animal.condicion_reproductiva || '',
-      raza: animal.raza || 'Criollo',
-      color: animal.color || '',
+      arete: animal.arete || "",
+      nombre: animal.nombre || "",
+      sexo: animal.sexo || "Macho",
+      fecha_nacimiento:
+        animal.fecha_nacimiento || "",
+      categoria: animal.categoria || "Becerro",
+      raza: animal.raza || "Criollo",
+      color: animal.color || "",
       senales_particulares:
-        animal.senales_particulares || '',
-      potrero: animal.potrero || '',
+        animal.senales_particulares || "",
+      potrero: animal.potrero || "",
       peso_actual:
-        animal.peso_actual !== null &&
-        animal.peso_actual !== undefined
-          ? animal.peso_actual
-          : ''
+        animal.peso_actual ?? "",
+      finalidad:
+        animal.finalidad || "",
+      condicion_reproductiva:
+        animal.condicion_reproductiva || "",
     });
   }, [animal]);
 
-  if (!animal) {
-    return null;
-  }
+  if (!animal) return null;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
 
     setForm((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
@@ -65,47 +63,44 @@ export default function AnimalEditModal({
     e.preventDefault();
 
     if (!form.arete.trim()) {
-      toast.error('El arete es obligatorio');
+      toast.error("El arete es obligatorio");
       return;
     }
 
-    setLoading(true);
-
     try {
-      const dataToSubmit = {
+      setSaving(true);
+
+      const data = {
         ...form,
         peso_actual:
-          form.peso_actual === ''
+          form.peso_actual === ""
             ? null
-            : Number(form.peso_actual)
+            : Number(form.peso_actual),
       };
 
-      await animalService.update(
-        animal.id,
-        dataToSubmit
-      );
+      await animalService.update(animal.id, data);
 
-      toast.success('Animal actualizado correctamente');
+      toast.success(
+        "Animal actualizado correctamente"
+      );
 
       onSuccess?.();
       onClose?.();
-
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
 
       toast.error(
-        error?.response?.data?.error ||
-        'Error al actualizar el animal'
+        err?.response?.data?.error ||
+          "Error al actualizar animal"
       );
-
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
 
         <div className="flex items-center justify-between p-6 border-b">
           <div>
@@ -122,15 +117,16 @@ export default function AnimalEditModal({
             type="button"
             onClick={onClose}
             className="text-gray-500 hover:text-gray-800 text-2xl"
-            disabled={loading}
           >
             ×
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <form
+          onSubmit={handleSubmit}
+          className="p-6"
+        >
+          <div className="grid md:grid-cols-2 gap-4">
 
             {/* ARETE */}
             <div>
@@ -144,7 +140,7 @@ export default function AnimalEditModal({
                 value={form.arete}
                 onChange={handleChange}
                 required
-                className="w-full border border-gray-300 rounded p-2"
+                className="w-full border border-gray-300 rounded-lg p-2"
               />
             </div>
 
@@ -159,31 +155,36 @@ export default function AnimalEditModal({
                 name="nombre"
                 value={form.nombre}
                 onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
+                className="w-full border border-gray-300 rounded-lg p-2"
               />
             </div>
 
             {/* SEXO */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">
-                Sexo *
+                Sexo
               </label>
 
               <select
                 name="sexo"
                 value={form.sexo}
                 onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
+                className="w-full border border-gray-300 rounded-lg p-2"
               >
-                <option value="Macho">Macho</option>
-                <option value="Hembra">Hembra</option>
+                <option value="Macho">
+                  Macho
+                </option>
+
+                <option value="Hembra">
+                  Hembra
+                </option>
               </select>
             </div>
 
-            {/* FECHA NACIMIENTO */}
+            {/* FECHA */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">
-                Fecha de Nacimiento
+                Fecha de nacimiento
               </label>
 
               <input
@@ -191,24 +192,131 @@ export default function AnimalEditModal({
                 name="fecha_nacimiento"
                 value={form.fecha_nacimiento}
                 onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
+                className="w-full border border-gray-300 rounded-lg p-2"
+              />
+            </div>
+
+            {/* CATEGORIA */}
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Categoría
+              </label>
+
+              <input
+                type="text"
+                value={form.categoria}
+                disabled
+                className="w-full border border-gray-200 bg-gray-100 rounded-lg p-2 text-gray-600"
+              />
+
+              <p className="text-xs text-gray-500 mt-1">
+                Se determina automáticamente.
+              </p>
+            </div>
+
+            {/* RAZA */}
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Raza / Mestizaje
+              </label>
+
+              <select
+                name="raza"
+                value={form.raza}
+                onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg p-2"
+              >
+                <option value="Criollo">
+                  Criollo
+                </option>
+
+                <option value="Carora">
+                  Carora
+                </option>
+
+                <option value="Brahman">
+                  Brahman
+                </option>
+
+                <option value="Senepol">
+                  Senepol
+                </option>
+
+                <option value="Guzerá">
+                  Guzerá
+                </option>
+
+                <option value="Mosaico">
+                  Mosaico / Mestizo
+                </option>
+
+                <option value="Otro">
+                  Otro
+                </option>
+              </select>
+            </div>
+
+            {/* COLOR */}
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Color
+              </label>
+
+              <input
+                type="text"
+                name="color"
+                value={form.color}
+                onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg p-2"
+              />
+            </div>
+
+            {/* POTRERO */}
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Potrero / Lote
+              </label>
+
+              <input
+                type="text"
+                name="potrero"
+                value={form.potrero}
+                onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg p-2"
+              />
+            </div>
+
+            {/* PESO */}
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Peso actual (kg)
+              </label>
+
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                name="peso_actual"
+                value={form.peso_actual}
+                onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg p-2"
               />
             </div>
 
             {/* FINALIDAD */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">
-                Finalidad Productiva
+                Finalidad
               </label>
 
               <select
                 name="finalidad"
                 value={form.finalidad}
                 onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
+                className="w-full border border-gray-300 rounded-lg p-2"
               >
                 <option value="">
-                  Seleccionar...
+                  Seleccionar
                 </option>
 
                 <option value="Reproducción">
@@ -226,146 +334,55 @@ export default function AnimalEditModal({
             </div>
 
             {/* CONDICIÓN REPRODUCTIVA */}
-            <div>
+            {form.sexo === "Hembra" && (
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">
+                  Condición reproductiva
+                </label>
+
+                <select
+                  name="condicion_reproductiva"
+                  value={form.condicion_reproductiva}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                >
+                  <option value="">
+                    Seleccionar
+                  </option>
+
+                  <option value="Vacía">
+                    Vacía
+                  </option>
+
+                  <option value="Preñada">
+                    Preñada
+                  </option>
+                </select>
+              </div>
+            )}
+
+            {/* SEÑALES */}
+            <div className="md:col-span-2">
               <label className="block text-sm font-bold text-gray-700 mb-1">
-                Condición Reproductiva
+                Señales particulares
               </label>
 
-              <select
-                name="condicion_reproductiva"
-                value={form.condicion_reproductiva}
+              <textarea
+                name="senales_particulares"
+                value={form.senales_particulares}
                 onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
-              >
-                <option value="">
-                  Seleccionar...
-                </option>
-
-                <option value="Vacía">
-                  Vacía
-                </option>
-
-                <option value="Preñada">
-                  Preñada
-                </option>
-
-                <option value="Lactando">
-                  Lactando
-                </option>
-              </select>
-            </div>
-
-            {/* RAZA */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">
-                Raza / Mestizaje
-              </label>
-
-              <select
-                name="raza"
-                value={form.raza}
-                onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
-              >
-                <option value="Criollo">Criollo</option>
-                <option value="Carora">Carora</option>
-                <option value="Brahman">Brahman</option>
-                <option value="Senepol">Senepol</option>
-                <option value="Guzerá">Guzerá</option>
-                <option value="Mosaico">
-                  Mosaico / Mestizo
-                </option>
-                <option value="Otro">Otro</option>
-              </select>
-            </div>
-
-            {/* COLOR */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">
-                Color del Pelaje
-              </label>
-
-              <input
-                type="text"
-                name="color"
-                value={form.color}
-                onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
+                rows="3"
+                className="w-full border border-gray-300 rounded-lg p-2"
               />
             </div>
-
-            {/* POTRERO */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">
-                Potrero / Lote
-              </label>
-
-              <input
-                type="text"
-                name="potrero"
-                value={form.potrero}
-                onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
-              />
-            </div>
-
-            {/* PESO */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">
-                Peso Actual (kg)
-              </label>
-
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                name="peso_actual"
-                value={form.peso_actual}
-                onChange={handleChange}
-                className="w-full border border-gray-300 rounded p-2"
-              />
-            </div>
-
           </div>
 
-          {/* SEÑALES */}
-          <div className="mt-5">
-            <label className="block text-sm font-bold text-gray-700 mb-1">
-              Señales Particulares
-            </label>
-
-            <textarea
-              name="senales_particulares"
-              value={form.senales_particulares}
-              onChange={handleChange}
-              rows={3}
-              className="w-full border border-gray-300 rounded p-2"
-            />
-          </div>
-
-          {/* INFO CATEGORÍA */}
-          <div className="mt-5 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm font-bold text-blue-900">
-              Categoría actual
-            </p>
-
-            <p className="text-blue-700 mt-1">
-              {animal.categoria || 'Sin categoría'}
-            </p>
-
-            <p className="text-xs text-gray-600 mt-2">
-              La categoría es administrada por el sistema.
-              No se modifica manualmente desde esta pantalla.
-            </p>
-          </div>
-
-          {/* BOTONES */}
-          <div className="flex justify-end gap-3 mt-6">
+          <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
 
             <button
               type="button"
               onClick={onClose}
-              disabled={loading}
+              disabled={saving}
               className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
             >
               Cancelar
@@ -373,16 +390,15 @@ export default function AnimalEditModal({
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={saving}
               className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading
-                ? 'Guardando...'
-                : 'Guardar Cambios'}
+              {saving
+                ? "Guardando..."
+                : "Guardar cambios"}
             </button>
 
           </div>
-
         </form>
       </div>
     </div>

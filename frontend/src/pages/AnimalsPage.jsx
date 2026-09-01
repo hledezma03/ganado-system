@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { animalService } from "../services/api";
 import AnimalForm from "../components/AnimalForm";
@@ -8,13 +8,12 @@ export default function AnimalsPage() {
   const [animals, setAnimals] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedAnimal, setSelectedAnimal] = useState(null);
+  const [editingAnimal, setEditingAnimal] = useState(null);
 
-  const [statusAnimal, setStatusAnimal] = useState(null);
-  const [newStatus, setNewStatus] = useState("");
-
-  const [deleteAnimal, setDeleteAnimal] = useState(null);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [search, setSearch] = useState("");
+  const [filterSexo, setFilterSexo] = useState("Todos");
+  const [filterCategoria, setFilterCategoria] = useState("Todas");
+  const [filterEstado, setFilterEstado] = useState("Todos");
 
   useEffect(() => {
     fetchAnimals();
@@ -26,40 +25,14 @@ export default function AnimalsPage() {
 
       const data = await animalService.getAll();
 
-      setAnimals(Array.isArray(data) ? data : []);
+      setAnimals(Array.isArray(data) ? data : data?.data || []);
     } catch (err) {
       console.error(err);
+
       toast.error("Error cargando animales");
     } finally {
       setLoading(false);
     }
-  };
-
-  // =========================
-  // EDITAR
-  // =========================
-
-  const handleEdit = (animal) => {
-    setSelectedAnimal(animal);
-  };
-
-  const handleEditSuccess = async () => {
-    setSelectedAnimal(null);
-    await fetchAnimals();
-  };
-
-  // =========================
-  // CAMBIAR ESTADO
-  // =========================
-
-  const openStatusModal = (animal) => {
-    setStatusAnimal(animal);
-    setNewStatus(animal.estado || "Activo");
-  };
-
-  const closeStatusModal = () => {
-    setStatusAnimal(null);
-    setNewStatus("");
   };
 
   const handleSyncCategories = async () => {
@@ -67,7 +40,7 @@ export default function AnimalsPage() {
       const result = await animalService.syncCategories();
 
       toast.success(
-        `${result.categorias_actualizadas} categorías actualizadas`,
+        `${result.categorias_actualizadas} categoría(s) actualizada(s)`,
       );
 
       await fetchAnimals();
@@ -80,51 +53,40 @@ export default function AnimalsPage() {
     }
   };
 
-  const handleStatusChange = async () => {
-    if (!statusAnimal || !newStatus) return;
-
+  const handleStatusChange = async (animal, estado) => {
     try {
-      await animalService.updateStatus(statusAnimal.id, newStatus);
+      await animalService.updateStatus(animal.id, estado);
 
-      toast.success(`Estado actualizado a "${newStatus}"`);
+      toast.success(`Animal marcado como ${estado}`);
 
-      closeStatusModal();
       await fetchAnimals();
     } catch (err) {
       console.error(err);
 
-      toast.error(err?.response?.data?.error || "Error actualizando el estado");
+      toast.error(err?.response?.data?.error || "Error actualizando estado");
     }
   };
 
-  // =========================
-  // ELIMINACIÓN PERMANENTE
-  // =========================
+  const handlePermanentDelete = async (animal) => {
+    const confirmed = window.confirm(
+      `⚠️ ELIMINACIÓN PERMANENTE\n\n` +
+        `Arete: ${animal.arete}\n` +
+        `Nombre: ${animal.nombre || "Sin nombre"}\n\n` +
+        `Esta acción eliminará definitivamente ` +
+        `el animal y sus datos relacionados.\n\n` +
+        `Esta opción debe utilizarse únicamente ` +
+        `para datos de prueba o registros creados ` +
+        `por error.\n\n` +
+        `¿Deseas continuar?`,
+    );
 
-  const openDeleteModal = (animal) => {
-    setDeleteAnimal(animal);
-    setDeleteConfirmation("");
-  };
-
-  const closeDeleteModal = () => {
-    setDeleteAnimal(null);
-    setDeleteConfirmation("");
-  };
-
-  const handlePermanentDelete = async () => {
-    if (!deleteAnimal) return;
-
-    if (deleteConfirmation !== deleteAnimal.arete) {
-      toast.error("Debes escribir exactamente el arete del animal");
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      await animalService.deletePermanent(deleteAnimal.id);
+      await animalService.deletePermanent(animal.id);
 
-      toast.success(`Animal ${deleteAnimal.arete} eliminado permanentemente`);
+      toast.success("Animal eliminado permanentemente");
 
-      closeDeleteModal();
       await fetchAnimals();
     } catch (err) {
       console.error(err);
@@ -135,11 +97,32 @@ export default function AnimalsPage() {
     }
   };
 
-  // =========================
-  // ESTILOS DE ESTADO
-  // =========================
+  const filteredAnimals = useMemo(() => {
+    const text = search.trim().toLowerCase();
 
-  const getStatusClasses = (estado) => {
+    return animals.filter((animal) => {
+      const matchesSearch =
+        !text ||
+        String(animal.arete || "")
+          .toLowerCase()
+          .includes(text) ||
+        String(animal.nombre || "")
+          .toLowerCase()
+          .includes(text);
+
+      const matchesSexo = filterSexo === "Todos" || animal.sexo === filterSexo;
+
+      const matchesCategoria =
+        filterCategoria === "Todas" || animal.categoria === filterCategoria;
+
+      const matchesEstado =
+        filterEstado === "Todos" || animal.estado === filterEstado;
+
+      return matchesSearch && matchesSexo && matchesCategoria && matchesEstado;
+    });
+  }, [animals, search, filterSexo, filterCategoria, filterEstado]);
+
+  const getStatusClass = (estado) => {
     switch (estado) {
       case "Activo":
         return "bg-green-100 text-green-800";
@@ -148,7 +131,7 @@ export default function AnimalsPage() {
         return "bg-blue-100 text-blue-800";
 
       case "Muerto":
-        return "bg-gray-200 text-gray-800";
+        return "bg-gray-200 text-gray-700";
 
       case "Desaparecido":
         return "bg-red-100 text-red-800";
@@ -158,278 +141,245 @@ export default function AnimalsPage() {
     }
   };
 
+  const getCategoryClass = (categoria) => {
+    switch (categoria) {
+      case "Becerro":
+        return "bg-yellow-100 text-yellow-800";
+
+      case "Maute":
+        return "bg-orange-100 text-orange-800";
+
+      case "Novilla":
+        return "bg-purple-100 text-purple-800";
+
+      case "Vaca":
+        return "bg-pink-100 text-pink-800";
+
+      case "Toro":
+        return "bg-blue-100 text-blue-800";
+
+      case "Novillo":
+        return "bg-indigo-100 text-indigo-800";
+
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
   return (
-    <>
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* =========================
-            ANIMALES
-        ========================== */}
+    <div className="space-y-6">
+      {/* ENCABEZADO */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-blue-900">
+              Animales Registrados
+            </h2>
 
-        <div className="md:col-span-2">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold">Animales Registrados</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {filteredAnimals.length} de {animals.length} animales
+            </p>
+          </div>
 
-                <p className="text-sm text-gray-500 mt-1">
-                  {animals.length} animales
-                </p>
-              </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={fetchAnimals}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+            >
+              ↻ Actualizar
+            </button>
 
-              <button
-                type="button"
-                onClick={handleSyncCategories}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                🔄 Actualizar categorías
-              </button>
-
-              <button
-                type="button"
-                onClick={fetchAnimals}
-                disabled={loading}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-              >
-                {loading ? "Actualizando..." : "↻ Actualizar"}
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="py-10 text-center text-gray-500">
-                Cargando animales...
-              </div>
-            ) : animals.length === 0 ? (
-              <div className="py-10 text-center text-gray-500">
-                No hay animales registrados
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="p-3 text-left">Arete</th>
-
-                      <th className="p-3 text-left">Nombre</th>
-
-                      <th className="p-3 text-left">Sexo</th>
-
-                      <th className="p-3 text-left">Categoría</th>
-
-                      <th className="p-3 text-left">Peso</th>
-
-                      <th className="p-3 text-left">Estado</th>
-
-                      <th className="p-3 text-center">Acciones</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {animals.map((animal) => (
-                      <tr key={animal.id} className="border-t hover:bg-gray-50">
-                        <td className="p-3 font-bold">{animal.arete}</td>
-
-                        <td className="p-3">{animal.nombre || "-"}</td>
-
-                        <td className="p-3">{animal.sexo}</td>
-
-                        <td className="p-3">{animal.categoria || "-"}</td>
-
-                        <td className="p-3">
-                          {animal.peso_actual !== null &&
-                          animal.peso_actual !== undefined
-                            ? `${animal.peso_actual} kg`
-                            : "-"}
-                        </td>
-
-                        <td className="p-3">
-                          <span
-                            className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getStatusClasses(
-                              animal.estado,
-                            )}`}
-                          >
-                            {animal.estado || "Activo"}
-                          </span>
-                        </td>
-
-                        <td className="p-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleEdit(animal)}
-                              className="px-3 py-1.5 text-sm text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
-                            >
-                              ✏️ Editar
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => openStatusModal(animal)}
-                              className="px-3 py-1.5 text-sm text-orange-700 bg-orange-50 rounded-lg hover:bg-orange-100"
-                            >
-                              🔄 Estado
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={handleSyncCategories}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              🔄 Actualizar categorías
+            </button>
           </div>
         </div>
 
-        {/* =========================
-            REGISTRAR
-        ========================== */}
+        {/* FILTROS */}
+        <div className="grid md:grid-cols-4 gap-3 mt-6">
+          <input
+            type="text"
+            placeholder="Buscar por arete o nombre..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="border border-gray-300 rounded-lg p-2"
+          />
 
-        <div>
-          <AnimalForm onSuccess={fetchAnimals} />
+          <select
+            value={filterSexo}
+            onChange={(e) => setFilterSexo(e.target.value)}
+            className="border border-gray-300 rounded-lg p-2"
+          >
+            <option value="Todos">Todos los sexos</option>
+
+            <option value="Macho">Machos</option>
+
+            <option value="Hembra">Hembras</option>
+          </select>
+
+          <select
+            value={filterCategoria}
+            onChange={(e) => setFilterCategoria(e.target.value)}
+            className="border border-gray-300 rounded-lg p-2"
+          >
+            <option value="Todas">Todas las categorías</option>
+
+            <option value="Becerro">Becerro</option>
+
+            <option value="Maute">Maute</option>
+
+            <option value="Novilla">Novilla</option>
+
+            <option value="Vaca">Vaca</option>
+
+            <option value="Toro">Toro</option>
+
+            <option value="Novillo">Novillo</option>
+          </select>
+
+          <select
+            value={filterEstado}
+            onChange={(e) => setFilterEstado(e.target.value)}
+            className="border border-gray-300 rounded-lg p-2"
+          >
+            <option value="Todos">Todos los estados</option>
+
+            <option value="Activo">Activos</option>
+
+            <option value="Vendido">Vendidos</option>
+
+            <option value="Muerto">Muertos</option>
+
+            <option value="Desaparecido">Desaparecidos</option>
+          </select>
         </div>
       </div>
 
-      {/* =========================
-          MODAL EDITAR
-      ========================== */}
+      {/* TABLA */}
+      <div className="bg-white rounded-lg shadow p-6">
+        {loading ? (
+          <p className="text-gray-500">Cargando animales...</p>
+        ) : filteredAnimals.length === 0 ? (
+          <p className="text-gray-500">
+            No hay animales que coincidan con los filtros.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="p-3 text-left">Arete</th>
 
-      {selectedAnimal && (
+                  <th className="p-3 text-left">Nombre</th>
+
+                  <th className="p-3 text-left">Sexo</th>
+
+                  <th className="p-3 text-left">Categoría</th>
+
+                  <th className="p-3 text-left">Peso</th>
+
+                  <th className="p-3 text-left">Estado</th>
+
+                  <th className="p-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredAnimals.map((animal) => (
+                  <tr key={animal.id} className="border-t hover:bg-gray-50">
+                    <td className="p-3 font-bold">{animal.arete}</td>
+
+                    <td className="p-3">{animal.nombre || "-"}</td>
+
+                    <td className="p-3">{animal.sexo}</td>
+
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getCategoryClass(
+                          animal.categoria,
+                        )}`}
+                      >
+                        {animal.categoria}
+                      </span>
+                    </td>
+
+                    <td className="p-3">
+                      {animal.peso_actual ? `${animal.peso_actual} kg` : "-"}
+                    </td>
+
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(
+                          animal.estado,
+                        )}`}
+                      >
+                        {animal.estado}
+                      </span>
+                    </td>
+
+                    <td className="p-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingAnimal(animal)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Editar
+                        </button>
+
+                        {animal.estado === "Desaparecido" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStatusChange(animal, "Activo")}
+                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                          >
+                            Recuperar
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleStatusChange(animal, "Desaparecido")
+                            }
+                            className="px-3 py-1 bg-orange-500 text-white rounded hover:bg-orange-600"
+                          >
+                            Dar de baja
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handlePermanentDelete(animal)}
+                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* FORMULARIO NUEVO */}
+      <AnimalForm onSuccess={fetchAnimals} />
+
+      {/* MODAL EDICIÓN */}
+      {editingAnimal && (
         <AnimalEditModal
-          animal={selectedAnimal}
-          onClose={() => setSelectedAnimal(null)}
-          onSuccess={handleEditSuccess}
+          animal={editingAnimal}
+          onClose={() => setEditingAnimal(null)}
+          onSuccess={fetchAnimals}
         />
       )}
-
-      {/* =========================
-          MODAL ESTADO
-      ========================== */}
-
-      {statusAnimal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl">
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                Cambiar estado
-              </h3>
-
-              <p className="text-gray-600 mt-2">
-                Animal:
-                <strong className="ml-1">{statusAnimal.arete}</strong>
-              </p>
-
-              <div className="mt-5">
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Estado
-                </label>
-
-                <select
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg p-3"
-                >
-                  <option value="Activo">Activo</option>
-
-                  <option value="Desaparecido">Desaparecido</option>
-
-                  <option value="Vendido">Vendido</option>
-
-                  <option value="Muerto">Muerto</option>
-                </select>
-              </div>
-
-              {newStatus === "Desaparecido" && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800">
-                    El animal permanecerá registrado y podrás volver a cambiarlo
-                    a<strong> Activo</strong> cuando sea localizado.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={closeStatusModal}
-                  className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleStatusChange}
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Guardar estado
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================
-          MODAL ELIMINACIÓN
-      ========================== */}
-
-      {deleteAnimal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl">
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-red-700">
-                Eliminar permanentemente
-              </h3>
-
-              <p className="text-gray-700 mt-3">
-                Esta acción eliminará definitivamente el registro del animal.
-              </p>
-
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-800">
-                  Utiliza esta opción únicamente para
-                  <strong> datos de prueba </strong>o registros creados por
-                  error.
-                </p>
-              </div>
-
-              <div className="mt-5">
-                <p className="text-sm text-gray-600 mb-2">
-                  Para confirmar, escribe:
-                </p>
-
-                <p className="font-bold mb-2">{deleteAnimal.arete}</p>
-
-                <input
-                  type="text"
-                  value={deleteConfirmation}
-                  onChange={(e) => setDeleteConfirmation(e.target.value)}
-                  placeholder="Escribe el arete"
-                  className="w-full border border-gray-300 rounded-lg p-3"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={closeDeleteModal}
-                  className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="button"
-                  disabled={deleteConfirmation !== deleteAnimal.arete}
-                  onClick={handlePermanentDelete}
-                  className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Eliminar definitivamente
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 }
