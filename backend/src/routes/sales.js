@@ -2,12 +2,12 @@ const express = require("express");
 
 const router = express.Router();
 
-const saleController = require("../controllers/saleController");
+const salesController = require("../controllers/salesController");
 
-router.post("/", saleController.createSale);
+router.post("/batch", salesController.createSaleBatch);
 
-router.get("/", saleController.getSales);
+router.get("/batches", salesController.getSaleBatches);
 
-router.get("/:id", saleController.getSale);
+router.get("/batches/:id", salesController.getSaleBatch);
 
 module.exports = router;

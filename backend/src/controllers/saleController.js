@@ -1,16 +1,9 @@
 const supabase = require("../config/database");
 
-// Crear una venta por lote
-exports.createSale = async (req, res) => {
+// Crear venta por lote
+exports.createSaleBatch = async (req, res) => {
   try {
-    const {
-      fecha_venta,
-      comprador,
-      tipo_venta,
-      precio_kg,
-      notas,
-      animales,
-    } = req.body;
+    const { fecha_venta, comprador, tipo_venta, notas, animales } = req.body;
 
     if (!fecha_venta) {
       return res.status(400).json({
@@ -18,154 +11,163 @@ exports.createSale = async (req, res) => {
       });
     }
 
-    if (!tipo_venta) {
-      return res.status(400).json({
-        error: "El tipo de venta es obligatorio",
-      });
-    }
-
-    if (!precio_kg || Number(precio_kg) <= 0) {
-      return res.status(400).json({
-        error: "El precio por kg debe ser mayor a 0",
-      });
-    }
-
-    if (!Array.isArray(animales) || animales.length === 0) {
+    if (!animales || !Array.isArray(animales) || animales.length === 0) {
       return res.status(400).json({
         error: "Debe seleccionar al menos un animal",
       });
     }
 
-    // Verificar animales
-    const animalIds = animales.map(
-      (animal) => animal.id_animal
-    );
+    // Crear lote
+    const { data: lote, error: loteError } = await supabase
+      .from("sales_batches")
+      .insert([
+        {
+          fecha_venta,
+          comprador: comprador || null,
+          tipo_venta: tipo_venta || "Pie",
+          notas: notas || null,
+          ingreso_total: 0,
+        },
+      ])
+      .select()
+      .single();
 
-    const { data: existingAnimals, error: animalsError } =
-      await supabase
-        .from("animals")
-        .select("id, arete, estado")
-        .in("id", animalIds);
+    if (loteError) throw loteError;
 
-    if (animalsError) throw animalsError;
+    let ingresoTotal = 0;
+    const ventas = [];
 
-    if (
-      !existingAnimals ||
-      existingAnimals.length !== animalIds.length
-    ) {
-      return res.status(400).json({
-        error:
-          "Uno o más animales seleccionados no existen",
-      });
-    }
+    for (const animalVenta of animales) {
+      const { id_animal, peso_venta_kg, precio_kg, rendimiento_canal } =
+        animalVenta;
 
-    const unavailable = existingAnimals.filter(
-      (animal) => animal.estado !== "Activo"
-    );
-
-    if (unavailable.length > 0) {
-      return res.status(400).json({
-        error:
-          "Solo se pueden vender animales que estén activos",
-        animales: unavailable,
-      });
-    }
-
-    // Calcular detalle de venta
-    const saleAnimals = animales.map((animal) => {
-      const peso = Number(animal.peso_venta_kg);
-      const precio = Number(precio_kg);
-
-      if (!peso || peso <= 0) {
-        throw new Error(
-          `Peso inválido para el animal ${animal.id_animal}`
-        );
+      if (!id_animal) {
+        throw new Error("Uno de los animales no tiene ID");
       }
 
-      const ingreso = peso * precio;
+      if (
+        peso_venta_kg === undefined ||
+        peso_venta_kg === null ||
+        peso_venta_kg === ""
+      ) {
+        throw new Error("Todos los animales deben tener peso de venta");
+      }
 
-      return {
-        id_animal: animal.id_animal,
-        peso_venta_kg: peso,
-        rendimiento_canal:
-          animal.rendimiento_canal || null,
-        precio_kg: precio,
-        ingreso_animal: ingreso,
-      };
-    });
+      if (precio_kg === undefined || precio_kg === null || precio_kg === "") {
+        throw new Error("Todos los animales deben tener precio por kg");
+      }
 
-    const ingresoTotal = saleAnimals.reduce(
-      (total, animal) =>
-        total + Number(animal.ingreso_animal),
-      0
-    );
+      // Obtener información actual del animal
+      const { data: animal, error: animalError } = await supabase
+        .from("animals")
+        .select("id, fecha_nacimiento, peso_nacimiento, peso_actual")
+        .eq("id", id_animal)
+        .single();
 
-    // Crear venta
-    const { data: sale, error: saleError } =
-      await supabase
+      if (animalError) throw animalError;
+
+      const pesoVenta = Number(peso_venta_kg);
+      const precioKg = Number(precio_kg);
+
+      const ingresoTotalAnimal = pesoVenta * precioKg;
+
+      ingresoTotal += ingresoTotalAnimal;
+
+      // Edad al momento de venta
+      let edadDias = null;
+      let edadMeses = null;
+      let edadAnios = null;
+
+      if (animal.fecha_nacimiento) {
+        const nacimiento = new Date(animal.fecha_nacimiento);
+        const venta = new Date(fecha_venta);
+
+        edadDias = Math.floor((venta - nacimiento) / (1000 * 60 * 60 * 24));
+
+        edadMeses = Math.floor(edadDias / 30.4375);
+        edadAnios = Math.floor(edadDias / 365.25);
+      }
+
+      // Peso ganado desde nacimiento
+      let pesoGanado = null;
+      let gananciaDiaria = null;
+
+      if (
+        animal.peso_nacimiento !== null &&
+        animal.peso_nacimiento !== undefined &&
+        edadDias !== null &&
+        edadDias > 0
+      ) {
+        pesoGanado = pesoVenta - Number(animal.peso_nacimiento);
+
+        gananciaDiaria = pesoGanado / edadDias;
+      }
+
+      // Crear registro individual de venta
+      const { data: venta, error: ventaError } = await supabase
         .from("sales")
         .insert([
           {
+            id_animal,
+            id_lote: lote.id,
             fecha_venta,
-            comprador,
-            tipo_venta,
-            precio_kg: Number(precio_kg),
-            notas,
-            ingreso_total: ingresoTotal,
+            comprador: comprador || null,
+            tipo_venta: tipo_venta || "Pie",
+            peso_venta_kg: pesoVenta,
+            precio_kg: precioKg,
+            rendimiento_canal:
+              rendimiento_canal !== undefined && rendimiento_canal !== ""
+                ? Number(rendimiento_canal)
+                : null,
+            ingreso_total: ingresoTotalAnimal,
+
+            edad_al_vender: edadDias,
+            dias_en_finca: null,
+            peso_ganado: pesoGanado,
+            ganancia_diaria: gananciaDiaria,
           },
         ])
         .select()
         .single();
 
-    if (saleError) throw saleError;
+      if (ventaError) throw ventaError;
 
-    // Asociar animales
-    const saleAnimalsWithSaleId =
-      saleAnimals.map((animal) => ({
-        ...animal,
-        id_venta: sale.id,
-      }));
+      ventas.push(venta);
 
-    const {
-      data: insertedAnimals,
-      error: saleAnimalsError,
-    } = await supabase
-      .from("sale_animals")
-      .insert(saleAnimalsWithSaleId)
-      .select();
-
-    if (saleAnimalsError) {
-      // Intentar revertir la venta
-      await supabase
-        .from("sales")
-        .delete()
-        .eq("id", sale.id);
-
-      throw saleAnimalsError;
-    }
-
-    // Marcar animales como vendidos
-    const { error: updateAnimalsError } =
-      await supabase
+      // Marcar animal como vendido
+      const { error: updateAnimalError } = await supabase
         .from("animals")
         .update({
           estado: "Vendido",
+          updated_at: new Date().toISOString(),
         })
-        .in("id", animalIds);
+        .eq("id", id_animal);
 
-    if (updateAnimalsError) {
-      throw updateAnimalsError;
+      if (updateAnimalError) {
+        throw updateAnimalError;
+      }
     }
+
+    // Actualizar total del lote
+    const { data: loteActualizado, error: updateLoteError } = await supabase
+      .from("sales_batches")
+      .update({
+        ingreso_total: ingresoTotal,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", lote.id)
+      .select()
+      .single();
+
+    if (updateLoteError) throw updateLoteError;
 
     res.status(201).json({
       success: true,
-      data: {
-        venta: sale,
-        animales: insertedAnimals,
-      },
+      lote: loteActualizado,
+      ventas,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error creando venta por lote:", err);
 
     res.status(400).json({
       error: err.message,
@@ -173,21 +175,16 @@ exports.createSale = async (req, res) => {
   }
 };
 
-
-// Obtener todas las ventas
-exports.getSales = async (req, res) => {
+// Obtener lotes de ventas
+exports.getSaleBatches = async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from("sales")
-      .select(`
+      .from("sales_batches")
+      .select(
+        `
         *,
-        sale_animals (
-          id,
-          id_animal,
-          peso_venta_kg,
-          rendimiento_canal,
-          precio_kg,
-          ingreso_animal,
+        sales (
+          *,
           animals (
             id,
             arete,
@@ -196,7 +193,8 @@ exports.getSales = async (req, res) => {
             categoria
           )
         )
-      `)
+      `,
+      )
       .order("fecha_venta", {
         ascending: false,
       });
@@ -205,7 +203,7 @@ exports.getSales = async (req, res) => {
 
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("Error obteniendo ventas:", err);
 
     res.status(400).json({
       error: err.message,
@@ -213,17 +211,17 @@ exports.getSales = async (req, res) => {
   }
 };
 
-
-// Obtener una venta
-exports.getSale = async (req, res) => {
+// Obtener un lote específico
+exports.getSaleBatch = async (req, res) => {
   try {
     const { id } = req.params;
 
     const { data, error } = await supabase
-      .from("sales")
-      .select(`
+      .from("sales_batches")
+      .select(
+        `
         *,
-        sale_animals (
+        sales (
           *,
           animals (
             id,
@@ -231,10 +229,12 @@ exports.getSale = async (req, res) => {
             nombre,
             sexo,
             categoria,
-            peso_actual
+            fecha_nacimiento,
+            peso_nacimiento
           )
         )
-      `)
+      `,
+      )
       .eq("id", id)
       .single();
 
