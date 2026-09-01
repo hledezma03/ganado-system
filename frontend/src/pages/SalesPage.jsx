@@ -13,6 +13,7 @@ export default function SalesPage() {
   const [categoryFilter, setCategoryFilter] = useState("Todas");
 
   const [selectedAnimals, setSelectedAnimals] = useState([]);
+  const [saleData, setSaleData] = useState({});
 
   const [form, setForm] = useState({
     fecha_venta: new Date().toISOString().split("T")[0],
@@ -20,8 +21,6 @@ export default function SalesPage() {
     tipo_venta: "Pie",
     notas: "",
   });
-
-  const [saleData, setSaleData] = useState({});
 
   useEffect(() => {
     loadData();
@@ -46,22 +45,25 @@ export default function SalesPage() {
     }
   };
 
-  // Solo animales activos pueden ser vendidos
-  const availableAnimals = useMemo(() => {
-    return animals.filter((animal) => animal.estado === "Activo");
-  }, [animals]);
+  // ==========================================
+  // ANIMALES DISPONIBLES
+  // ==========================================
 
-  // Categorías disponibles
+  const availableAnimals = useMemo(
+    () => animals.filter((animal) => animal.estado === "Activo"),
+    [animals],
+  );
+
   const categories = useMemo(() => {
-    return [
-      "Todas",
+    const uniqueCategories = [
       ...new Set(
         availableAnimals.map((animal) => animal.categoria).filter(Boolean),
       ),
     ];
+
+    return ["Todas", ...uniqueCategories];
   }, [availableAnimals]);
 
-  // Buscar y filtrar animales
   const filteredAnimals = useMemo(() => {
     const term = search.toLowerCase().trim();
 
@@ -78,6 +80,10 @@ export default function SalesPage() {
     });
   }, [availableAnimals, search, categoryFilter]);
 
+  // ==========================================
+  // FORMULARIO
+  // ==========================================
+
   const handleFormChange = (e) => {
     const { name, value } = e.target;
 
@@ -87,39 +93,35 @@ export default function SalesPage() {
     }));
   };
 
-  const calculateAge = (birthDate, saleDate) => {
-    if (!birthDate || !saleDate) return null;
-
-    const birth = new Date(birthDate);
-    const sale = new Date(saleDate);
-
-    const difference = sale.getTime() - birth.getTime();
-
-    if (difference < 0) return null;
-
-    return Math.floor(difference / (1000 * 60 * 60 * 24));
+  const handleSaleDateChange = (e) => {
+    setForm((prev) => ({
+      ...prev,
+      fecha_venta: e.target.value,
+    }));
   };
 
+  // ==========================================
+  // SELECCIÓN DE ANIMALES
+  // ==========================================
+
   const toggleAnimal = (animal) => {
-    const alreadySelected = selectedAnimals.some(
-      (item) => item.id === animal.id,
+    const isSelected = selectedAnimals.some(
+      (selected) => selected.id === animal.id,
     );
 
-    if (alreadySelected) {
+    if (isSelected) {
       setSelectedAnimals((prev) =>
-        prev.filter((item) => item.id !== animal.id),
+        prev.filter((selected) => selected.id !== animal.id),
       );
 
       setSaleData((prev) => {
-        const copy = { ...prev };
-        delete copy[animal.id];
-        return copy;
+        const updated = { ...prev };
+        delete updated[animal.id];
+        return updated;
       });
 
       return;
     }
-
-    const edadDias = calculateAge(animal.fecha_nacimiento, form.fecha_venta);
 
     setSelectedAnimals((prev) => [...prev, animal]);
 
@@ -129,17 +131,6 @@ export default function SalesPage() {
         peso_venta_kg: animal.peso_actual ?? "",
         precio_kg: "",
         rendimiento_canal: "",
-        edad_dias: edadDias,
-      },
-    }));
-  };
-
-  const updateSaleData = (animalId, field, value) => {
-    setSaleData((prev) => ({
-      ...prev,
-      [animalId]: {
-        ...prev[animalId],
-        [field]: value,
       },
     }));
   };
@@ -150,7 +141,10 @@ export default function SalesPage() {
         !selectedAnimals.some((selected) => selected.id === animal.id),
     );
 
-    if (newAnimals.length === 0) return;
+    if (newAnimals.length === 0) {
+      toast("Todos los animales filtrados ya están seleccionados");
+      return;
+    }
 
     setSelectedAnimals((prev) => [...prev, ...newAnimals]);
 
@@ -162,7 +156,6 @@ export default function SalesPage() {
           peso_venta_kg: animal.peso_actual ?? "",
           precio_kg: "",
           rendimiento_canal: "",
-          edad_dias: calculateAge(animal.fecha_nacimiento, form.fecha_venta),
         };
       });
 
@@ -175,61 +168,40 @@ export default function SalesPage() {
     setSaleData({});
   };
 
-  const handleSaleDateChange = (e) => {
-    const fecha = e.target.value;
-
-    setForm((prev) => ({
+  const updateSaleData = (animalId, field, value) => {
+    setSaleData((prev) => ({
       ...prev,
-      fecha_venta: fecha,
+      [animalId]: {
+        ...prev[animalId],
+        [field]: value,
+      },
     }));
-
-    setSaleData((prev) => {
-      const updated = { ...prev };
-
-      selectedAnimals.forEach((animal) => {
-        updated[animal.id] = {
-          ...updated[animal.id],
-          edad_dias: calculateAge(animal.fecha_nacimiento, fecha),
-        };
-      });
-
-      return updated;
-    });
   };
 
-  const getWeightGain = (animal) => {
+  // ==========================================
+  // TOTALES
+  // ==========================================
+
+  const getAnimalIncome = (animal) => {
     const data = saleData[animal.id];
 
-    if (!data || data.peso_venta_kg === "" || animal.peso_nacimiento == null) {
-      return null;
+    if (!data || data.peso_venta_kg === "" || data.precio_kg === "") {
+      return 0;
     }
 
-    return Number(data.peso_venta_kg) - Number(animal.peso_nacimiento);
+    return Number(data.peso_venta_kg) * Number(data.precio_kg);
   };
 
-  const getDailyGain = (animal) => {
-    const data = saleData[animal.id];
+  const totalSale = useMemo(() => {
+    return selectedAnimals.reduce(
+      (total, animal) => total + getAnimalIncome(animal),
+      0,
+    );
+  }, [selectedAnimals, saleData]);
 
-    const pesoGanado = getWeightGain(animal);
-
-    if (pesoGanado === null || !data.edad_dias || data.edad_dias <= 0) {
-      return null;
-    }
-
-    return pesoGanado / data.edad_dias;
-  };
-
-  const getTotalSale = () => {
-    return selectedAnimals.reduce((total, animal) => {
-      const data = saleData[animal.id];
-
-      if (!data || data.peso_venta_kg === "" || data.precio_kg === "") {
-        return total;
-      }
-
-      return total + Number(data.peso_venta_kg) * Number(data.precio_kg);
-    }, 0);
-  };
+  // ==========================================
+  // REGISTRAR VENTA
+  // ==========================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -242,13 +214,25 @@ export default function SalesPage() {
     for (const animal of selectedAnimals) {
       const data = saleData[animal.id];
 
-      if (data.peso_venta_kg === "" || Number(data.peso_venta_kg) <= 0) {
+      if (data?.peso_venta_kg === "" || Number(data?.peso_venta_kg) <= 0) {
         toast.error(`Falta el peso de venta del animal ${animal.arete}`);
         return;
       }
 
-      if (data.precio_kg === "" || Number(data.precio_kg) <= 0) {
+      if (data?.precio_kg === "" || Number(data?.precio_kg) <= 0) {
         toast.error(`Falta el precio por kg del animal ${animal.arete}`);
+        return;
+      }
+
+      if (
+        form.tipo_venta === "Canal" &&
+        data.rendimiento_canal !== "" &&
+        (Number(data.rendimiento_canal) < 0 ||
+          Number(data.rendimiento_canal) > 100)
+      ) {
+        toast.error(
+          `El rendimiento del animal ${animal.arete} debe estar entre 0 y 100`,
+        );
         return;
       }
     }
@@ -270,19 +254,22 @@ export default function SalesPage() {
             peso_venta_kg: Number(data.peso_venta_kg),
             precio_kg: Number(data.precio_kg),
             rendimiento_canal:
-              data.rendimiento_canal === ""
-                ? null
-                : Number(data.rendimiento_canal),
+              form.tipo_venta === "Canal" && data.rendimiento_canal !== ""
+                ? Number(data.rendimiento_canal)
+                : null,
           };
         }),
       };
 
       await saleService.createBatch(payload);
 
-      toast.success(`Venta registrada: ${selectedAnimals.length} animales`);
+      toast.success(
+        `Venta registrada: ${selectedAnimals.length} animal${
+          selectedAnimals.length === 1 ? "" : "es"
+        }`,
+      );
 
-      setSelectedAnimals([]);
-      setSaleData({});
+      clearSelection();
 
       setForm({
         fecha_venta: new Date().toISOString().split("T")[0],
@@ -301,6 +288,10 @@ export default function SalesPage() {
     }
   };
 
+  // ==========================================
+  // LOADING
+  // ==========================================
+
   if (loading) {
     return (
       <div className="p-6">
@@ -308,6 +299,10 @@ export default function SalesPage() {
       </div>
     );
   }
+
+  // ==========================================
+  // UI
+  // ==========================================
 
   return (
     <div className="space-y-6">
@@ -365,7 +360,6 @@ export default function SalesPage() {
               className="w-full border rounded p-2"
             >
               <option value="Pie">En pie</option>
-
               <option value="Canal">En canal</option>
             </select>
           </div>
@@ -395,7 +389,7 @@ export default function SalesPage() {
         </div>
       </div>
 
-      {/* SELECCION DE ANIMALES */}
+      {/* SELECCION */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
           <h2 className="text-xl font-bold">Seleccionar animales</h2>
@@ -419,7 +413,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* BUSQUEDA */}
+        {/* FILTROS */}
         <div className="grid md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-bold mb-1">
@@ -456,23 +450,17 @@ export default function SalesPage() {
           Mostrando {filteredAnimals.length} animales disponibles
         </div>
 
-        {/* TABLA ANIMALES */}
+        {/* TABLA */}
         <div className="overflow-x-auto border rounded">
           <table className="w-full text-sm">
             <thead className="bg-gray-100">
               <tr>
                 <th className="p-3 text-left">Seleccionar</th>
-
                 <th className="p-3 text-left">Arete</th>
-
                 <th className="p-3 text-left">Nombre</th>
-
                 <th className="p-3 text-left">Sexo</th>
-
                 <th className="p-3 text-left">Categoría</th>
-
                 <th className="p-3 text-left">Peso actual</th>
-
                 <th className="p-3 text-left">Peso nacimiento</th>
               </tr>
             </thead>
@@ -532,18 +520,18 @@ export default function SalesPage() {
         </div>
       </div>
 
-      {/* DETALLE DE ANIMALES SELECCIONADOS */}
+      {/* DETALLE */}
       {selectedAnimals.length > 0 && (
         <form
           onSubmit={handleSubmit}
           className="bg-white rounded-lg shadow p-6"
         >
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
             <h2 className="text-xl font-bold">Detalle de la venta</h2>
 
             <div className="text-lg font-bold text-green-700">
               Total: $
-              {getTotalSale().toLocaleString("es-VE", {
+              {totalSale.toLocaleString("es-VE", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
@@ -555,17 +543,8 @@ export default function SalesPage() {
               <thead className="bg-gray-100">
                 <tr>
                   <th className="p-3 text-left">Arete</th>
-
-                  <th className="p-3 text-left">Edad</th>
-
                   <th className="p-3 text-left">Peso nac.</th>
-
                   <th className="p-3 text-left">Peso venta</th>
-
-                  <th className="p-3 text-left">Peso ganado</th>
-
-                  <th className="p-3 text-left">Ganancia/día</th>
-
                   <th className="p-3 text-left">Precio/kg</th>
 
                   {form.tipo_venta === "Canal" && (
@@ -580,24 +559,11 @@ export default function SalesPage() {
                 {selectedAnimals.map((animal) => {
                   const data = saleData[animal.id];
 
-                  const pesoGanado = getWeightGain(animal);
-
-                  const gananciaDiaria = getDailyGain(animal);
-
-                  const ingreso =
-                    data?.peso_venta_kg && data?.precio_kg
-                      ? Number(data.peso_venta_kg) * Number(data.precio_kg)
-                      : 0;
+                  const ingreso = getAnimalIncome(animal);
 
                   return (
                     <tr key={animal.id} className="border-t">
                       <td className="p-3 font-bold">{animal.arete}</td>
-
-                      <td className="p-3">
-                        {data?.edad_dias != null
-                          ? `${data.edad_dias} días`
-                          : "-"}
-                      </td>
 
                       <td className="p-3">
                         {animal.peso_nacimiento
@@ -621,18 +587,6 @@ export default function SalesPage() {
                           className="w-28 border rounded p-2"
                           required
                         />
-                      </td>
-
-                      <td className="p-3">
-                        {pesoGanado !== null
-                          ? `${pesoGanado.toFixed(2)} kg`
-                          : "-"}
-                      </td>
-
-                      <td className="p-3">
-                        {gananciaDiaria !== null
-                          ? `${gananciaDiaria.toFixed(3)} kg/día`
-                          : "-"}
                       </td>
 
                       <td className="p-3">
