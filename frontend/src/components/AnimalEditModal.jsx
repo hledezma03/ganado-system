@@ -2,11 +2,7 @@ import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { animalService } from "../services/api";
 
-export default function AnimalEditModal({
-  animal,
-  onClose,
-  onSuccess,
-}) {
+export default function AnimalEditModal({ animal, onClose, onSuccess }) {
   const [form, setForm] = useState({
     arete: "",
     nombre: "",
@@ -17,6 +13,7 @@ export default function AnimalEditModal({
     color: "",
     senales_particulares: "",
     potrero: "",
+    peso_nacimiento: "",
     peso_actual: "",
     finalidad: "",
     condicion_reproductiva: "",
@@ -31,20 +28,16 @@ export default function AnimalEditModal({
       arete: animal.arete || "",
       nombre: animal.nombre || "",
       sexo: animal.sexo || "Macho",
-      fecha_nacimiento:
-        animal.fecha_nacimiento || "",
+      fecha_nacimiento: animal.fecha_nacimiento || "",
       categoria: animal.categoria || "Becerro",
       raza: animal.raza || "Criollo",
       color: animal.color || "",
-      senales_particulares:
-        animal.senales_particulares || "",
+      senales_particulares: animal.senales_particulares || "",
       potrero: animal.potrero || "",
-      peso_actual:
-        animal.peso_actual ?? "",
-      finalidad:
-        animal.finalidad || "",
-      condicion_reproductiva:
-        animal.condicion_reproductiva || "",
+      peso_nacimiento: animal.peso_nacimiento ?? "",
+      peso_actual: animal.peso_actual ?? "",
+      finalidad: animal.finalidad || "",
+      condicion_reproductiva: animal.condicion_reproductiva || "",
     });
   }, [animal]);
 
@@ -72,27 +65,39 @@ export default function AnimalEditModal({
 
       const data = {
         ...form,
-        peso_actual:
-          form.peso_actual === ""
-            ? null
-            : Number(form.peso_actual),
+
+        arete: form.arete.trim(),
+        nombre: form.nombre.trim() || null,
+
+        fecha_nacimiento: form.fecha_nacimiento || null,
+
+        color: form.color.trim() || null,
+
+        senales_particulares: form.senales_particulares.trim() || null,
+
+        potrero: form.potrero.trim() || null,
+
+        peso_nacimiento:
+          form.peso_nacimiento === "" ? null : Number(form.peso_nacimiento),
+
+        peso_actual: form.peso_actual === "" ? null : Number(form.peso_actual),
+
+        finalidad: form.finalidad || null,
+
+        condicion_reproductiva:
+          form.sexo === "Hembra" ? form.condicion_reproductiva || null : null,
       };
 
       await animalService.update(animal.id, data);
 
-      toast.success(
-        "Animal actualizado correctamente"
-      );
+      toast.success("Animal actualizado correctamente");
 
       onSuccess?.();
       onClose?.();
     } catch (err) {
       console.error(err);
 
-      toast.error(
-        err?.response?.data?.error ||
-          "Error al actualizar animal"
-      );
+      toast.error(err?.response?.data?.error || "Error al actualizar animal");
     } finally {
       setSaving(false);
     }
@@ -101,16 +106,12 @@ export default function AnimalEditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-
+        {/* HEADER */}
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-2xl font-bold text-blue-900">
-              Editar Animal
-            </h2>
+            <h2 className="text-2xl font-bold text-blue-900">Editar Animal</h2>
 
-            <p className="text-sm text-gray-500 mt-1">
-              Arete: {animal.arete}
-            </p>
+            <p className="text-sm text-gray-500 mt-1">Arete: {animal.arete}</p>
           </div>
 
           <button
@@ -122,12 +123,9 @@ export default function AnimalEditModal({
           </button>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="p-6"
-        >
+        {/* FORM */}
+        <form onSubmit={handleSubmit} className="p-6">
           <div className="grid md:grid-cols-2 gap-4">
-
             {/* ARETE */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">
@@ -171,17 +169,12 @@ export default function AnimalEditModal({
                 onChange={handleChange}
                 className="w-full border border-gray-300 rounded-lg p-2"
               >
-                <option value="Macho">
-                  Macho
-                </option>
-
-                <option value="Hembra">
-                  Hembra
-                </option>
+                <option value="Macho">Macho</option>
+                <option value="Hembra">Hembra</option>
               </select>
             </div>
 
-            {/* FECHA */}
+            {/* FECHA NACIMIENTO */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">
                 Fecha de nacimiento
@@ -226,33 +219,13 @@ export default function AnimalEditModal({
                 onChange={handleChange}
                 className="w-full border border-gray-300 rounded-lg p-2"
               >
-                <option value="Criollo">
-                  Criollo
-                </option>
-
-                <option value="Carora">
-                  Carora
-                </option>
-
-                <option value="Brahman">
-                  Brahman
-                </option>
-
-                <option value="Senepol">
-                  Senepol
-                </option>
-
-                <option value="Guzerá">
-                  Guzerá
-                </option>
-
-                <option value="Mosaico">
-                  Mosaico / Mestizo
-                </option>
-
-                <option value="Otro">
-                  Otro
-                </option>
+                <option value="Criollo">Criollo</option>
+                <option value="Carora">Carora</option>
+                <option value="Brahman">Brahman</option>
+                <option value="Senepol">Senepol</option>
+                <option value="Guzerá">Guzerá</option>
+                <option value="Mosaico">Mosaico / Mestizo</option>
+                <option value="Otro">Otro</option>
               </select>
             </div>
 
@@ -286,7 +259,28 @@ export default function AnimalEditModal({
               />
             </div>
 
-            {/* PESO */}
+            {/* PESO NACIMIENTO */}
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Peso al nacer (kg)
+              </label>
+
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                name="peso_nacimiento"
+                value={form.peso_nacimiento}
+                onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg p-2"
+              />
+
+              <p className="text-xs text-gray-500 mt-1">
+                Utilizado para calcular ganancia de peso desde nacimiento.
+              </p>
+            </div>
+
+            {/* PESO ACTUAL */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">
                 Peso actual (kg)
@@ -315,25 +309,17 @@ export default function AnimalEditModal({
                 onChange={handleChange}
                 className="w-full border border-gray-300 rounded-lg p-2"
               >
-                <option value="">
-                  Seleccionar
-                </option>
+                <option value="">Seleccionar</option>
 
-                <option value="Reproducción">
-                  Reproducción
-                </option>
+                <option value="Reproducción">Reproducción</option>
 
-                <option value="Ceba">
-                  Ceba
-                </option>
+                <option value="Ceba">Ceba</option>
 
-                <option value="Doble Propósito">
-                  Doble Propósito
-                </option>
+                <option value="Doble Propósito">Doble Propósito</option>
               </select>
             </div>
 
-            {/* CONDICIÓN REPRODUCTIVA */}
+            {/* CONDICION REPRODUCTIVA */}
             {form.sexo === "Hembra" && (
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">
@@ -346,17 +332,11 @@ export default function AnimalEditModal({
                   onChange={handleChange}
                   className="w-full border border-gray-300 rounded-lg p-2"
                 >
-                  <option value="">
-                    Seleccionar
-                  </option>
+                  <option value="">Seleccionar</option>
 
-                  <option value="Vacía">
-                    Vacía
-                  </option>
+                  <option value="Vacía">Vacía</option>
 
-                  <option value="Preñada">
-                    Preñada
-                  </option>
+                  <option value="Preñada">Preñada</option>
                 </select>
               </div>
             )}
@@ -377,8 +357,8 @@ export default function AnimalEditModal({
             </div>
           </div>
 
+          {/* BOTONES */}
           <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
-
             <button
               type="button"
               onClick={onClose}
@@ -393,11 +373,8 @@ export default function AnimalEditModal({
               disabled={saving}
               className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {saving
-                ? "Guardando..."
-                : "Guardar cambios"}
+              {saving ? "Guardando..." : "Guardar cambios"}
             </button>
-
           </div>
         </form>
       </div>
