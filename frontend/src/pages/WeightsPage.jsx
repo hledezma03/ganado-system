@@ -28,19 +28,13 @@ export default function WeightsPage() {
 
   const fetchAnimals = async () => {
     try {
-      setLoadingAnimals(true);
+      const data = await animalService.getAll();
 
-      const response = await animalService.getAll();
-
-      const data = Array.isArray(response) ? response : response?.data || [];
-
-      setAnimals(data);
+      setAnimals(Array.isArray(data) ? data : data?.data || []);
     } catch (err) {
       console.error("Error cargando animales:", err);
 
       toast.error(err?.response?.data?.error || "Error cargando animales");
-    } finally {
-      setLoadingAnimals(false);
     }
   };
 
