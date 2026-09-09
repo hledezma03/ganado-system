@@ -108,7 +108,9 @@ exports.recordWeight = async (req, res) => {
       const fecha1 = new Date(`${lastWeight.fecha_pesaje}T00:00:00`);
       const fecha2 = new Date(`${fecha_pesaje}T00:00:00`);
 
-      diasTranscurridos = Math.floor((fecha2 - fecha1) / (1000 * 60 * 60 * 24));
+      diasTranscurridos = Math.floor(
+        (fecha2 - fecha1) / (1000 * 60 * 60 * 24),
+      );
 
       pesoAnterior = Number(lastWeight.peso_kg);
 
@@ -116,7 +118,9 @@ exports.recordWeight = async (req, res) => {
       console.log("Días transcurridos:", diasTranscurridos);
 
       if (diasTranscurridos > 0) {
-        gdp = Number(((peso - pesoAnterior) / diasTranscurridos).toFixed(3));
+        gdp = Number(
+          ((peso - pesoAnterior) / diasTranscurridos).toFixed(3),
+        );
       }
     }
 

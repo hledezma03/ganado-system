@@ -8,6 +8,9 @@ export default function WeightsPage() {
 
   const [selectedAnimalId, setSelectedAnimalId] = useState("");
 
+  const [animalSearch, setAnimalSearch] = useState("");
+  const [showAnimalResults, setShowAnimalResults] = useState(false);
+
   const [form, setForm] = useState({
     id_animal: "",
     fecha_pesaje: new Date().toISOString().split("T")[0],
@@ -28,16 +31,27 @@ export default function WeightsPage() {
 
   const fetchAnimals = async () => {
     try {
+      setLoadingAnimals(true);
+
       const data = await animalService.getAll();
 
-      setAnimals(Array.isArray(data) ? data : data?.data || []);
+      const lista = Array.isArray(data) ? data : data?.data || [];
+
+      const animalesActivos = lista.filter(
+        (animal) => animal.estado === "Activo",
+      );
+
+      setAnimals(animalesActivos);
     } catch (err) {
       console.error("Error cargando animales:", err);
 
+      setAnimals([]);
+
       toast.error(err?.response?.data?.error || "Error cargando animales");
+    } finally {
+      setLoadingAnimals(false);
     }
   };
-
   // ==========================================================
   // ANIMAL SELECCIONADO
   // ==========================================================
@@ -46,27 +60,59 @@ export default function WeightsPage() {
     return animals.find((animal) => animal.id === selectedAnimalId);
   }, [animals, selectedAnimalId]);
 
+  const filteredAnimals = useMemo(() => {
+    const text = animalSearch.trim().toLowerCase();
+
+    if (!text) {
+      return animals.slice(0, 20);
+    }
+
+    return animals
+      .filter((animal) => {
+        const id = String(animal.id || "").toLowerCase();
+        const arete = String(animal.arete || "").toLowerCase();
+        const nombre = String(animal.nombre || "").toLowerCase();
+
+        return (
+          id.includes(text) || arete.includes(text) || nombre.includes(text)
+        );
+      })
+      .slice(0, 20);
+  }, [animals, animalSearch]);
+
   // ==========================================================
   // SELECCIONAR ANIMAL
   // ==========================================================
 
-  const handleAnimalChange = async (e) => {
-    const animalId = e.target.value;
 
-    setSelectedAnimalId(animalId);
+
+  const handleAnimalSelect = async (animal) => {
+    setSelectedAnimalId(animal.id);
 
     setForm((prev) => ({
       ...prev,
-      id_animal: animalId,
+      id_animal: animal.id,
     }));
+
+    setAnimalSearch("");
+    setShowAnimalResults(false);
 
     setHistory([]);
 
-    if (!animalId) {
-      return;
-    }
+    await fetchHistory(animal.id);
+  };
 
-    await fetchHistory(animalId);
+  const handleClearAnimal = () => {
+    setSelectedAnimalId("");
+
+    setForm((prev) => ({
+      ...prev,
+      id_animal: "",
+    }));
+
+    setAnimalSearch("");
+    setShowAnimalResults(false);
+    setHistory([]);
   };
 
   // ==========================================================
@@ -200,26 +246,104 @@ export default function WeightsPage() {
           <div>
             <label className="block text-sm font-bold mb-2">Animal</label>
 
-            <select
-              name="id_animal"
-              value={form.id_animal}
-              onChange={handleAnimalChange}
-              required
-              disabled={loadingAnimals || saving}
-              className="w-full border border-gray-300 rounded-lg p-2.5"
-            >
-              <option value="">
-                {loadingAnimals
-                  ? "Cargando animales..."
-                  : "Selecciona un animal"}
-              </option>
+            {loadingAnimals ? (
+              <div className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-500">
+                Cargando animales...
+              </div>
+            ) : selectedAnimal ? (
+              <div className="border border-gray-300 rounded-lg p-3 bg-gray-50">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-gray-800">
+                      {selectedAnimal.arete} -{" "}
+                      {selectedAnimal.nombre || "Sin nombre"}
+                    </p>
 
-              {animals.map((animal) => (
-                <option key={animal.id} value={animal.id}>
-                  {animal.arete} - {animal.nombre || "Sin nombre"}
-                </option>
-              ))}
-            </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ID: {selectedAnimal.id}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleClearAnimal}
+                    disabled={saving}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-white disabled:bg-gray-200"
+                  >
+                    Cambiar animal
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={animalSearch}
+                  onChange={(e) => {
+                    setAnimalSearch(e.target.value);
+                    setShowAnimalResults(true);
+                  }}
+                  onFocus={() => setShowAnimalResults(true)}
+                  placeholder="Buscar por arete, nombre o ID..."
+                  disabled={saving}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 pr-10"
+                />
+
+                {animalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAnimalSearch("");
+                      setShowAnimalResults(true);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    ✕
+                  </button>
+                )}
+
+                {showAnimalResults && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                    {filteredAnimals.length === 0 ? (
+                      <div className="p-4 text-sm text-gray-500">
+                        No se encontraron animales.
+                      </div>
+                    ) : (
+                      <>
+                        {filteredAnimals.map((animal) => (
+                          <button
+                            key={animal.id}
+                            type="button"
+                            onClick={() => handleAnimalSelect(animal)}
+                            className="w-full text-left px-4 py-3 hover:bg-gray-100 border-b last:border-b-0"
+                          >
+                            <p className="font-semibold text-gray-800">
+                              {animal.arete} - {animal.nombre || "Sin nombre"}
+                            </p>
+
+                            <p className="text-xs text-gray-500 mt-1">
+                              ID: {animal.id}
+                              {animal.peso_actual !== null &&
+                              animal.peso_actual !== undefined
+                                ? ` · Peso actual: ${animal.peso_actual} kg`
+                                : " · Sin peso registrado"}
+                            </p>
+                          </button>
+                        ))}
+
+                        {animals.length > 20 && !animalSearch && (
+                          <div className="p-3 text-xs text-gray-400 text-center border-t">
+                            Escribe para buscar entre los {animals.length}{" "}
+                            animales activos.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* INFORMACIÓN ANIMAL */}
