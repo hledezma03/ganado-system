@@ -16,16 +16,19 @@ const api = axios.create({
 export const animalService = {
   getAll: async () => {
     const response = await api.get("/animals");
+
     return response.data;
   },
 
   getById: async (id) => {
     const response = await api.get(`/animals/${id}`);
+
     return response.data;
   },
 
   create: async (animal) => {
     const response = await api.post("/animals", animal);
+
     return response.data;
   },
 
@@ -83,8 +86,27 @@ export const purchaseService = {
     return response.data;
   },
 
-  getAll: async () => {
-    const response = await api.get("/purchases");
+  getAll: async (params = {}) => {
+    const response = await api.get("/purchases", { params });
+
+    return response.data;
+  },
+
+  getByAnimal: async (animalId) => {
+    const response = await api.get(`/purchases/${animalId}`);
+
+    return response.data;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/purchases/${id}`, data);
+
+    return response.data;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/purchases/${id}`);
+
     return response.data;
   },
 };
@@ -118,13 +140,14 @@ export const expenseService = {
     return response.data;
   },
 
-  getAll: async () => {
-    const response = await api.get("/expenses");
+  getAll: async (params = {}) => {
+    const response = await api.get("/expenses", { params });
+
     return response.data;
   },
 
-  getSummary: async () => {
-    const response = await api.get("/expenses/summary");
+  getSummary: async (params = {}) => {
+    const response = await api.get("/expenses/summary", { params });
 
     return response.data;
   },
@@ -147,8 +170,8 @@ export const reportService = {
     return response.data;
   },
 
-  getFinancialSummary: async () => {
-    const response = await api.get("/reports/financial-summary");
+  getFinancialSummary: async (params = {}) => {
+    const response = await api.get("/reports/financial-summary", { params });
 
     return response.data;
   },
@@ -177,8 +200,8 @@ export const saleService = {
     return response.data;
   },
 
-  getSummary: async () => {
-    const response = await api.get("/sales/summary");
+  getSummary: async (params = {}) => {
+    const response = await api.get("/sales/summary", { params });
 
     return response.data;
   },
