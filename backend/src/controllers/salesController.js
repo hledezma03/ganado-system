@@ -1,6 +1,101 @@
 const supabase = require("../config/database");
 
-// Crear venta por lote
+const SALE_SELECT = `
+  id,
+  fecha_venta,
+  comprador,
+  tipo_venta,
+  precio_kg,
+  notas,
+  ingreso_total,
+  created_at,
+  updated_at,
+  edad_dias,
+  edad_meses,
+  peso_nacimiento,
+  peso_ganado,
+  ganancia_diaria,
+  ganancia_semanal,
+  ganancia_mensual,
+  id_lote,
+  edad_al_vender,
+  dias_en_finca,
+  sale_animals (
+    id,
+    id_venta,
+    id_animal,
+    peso_venta_kg,
+    rendimiento_canal,
+    precio_kg,
+    ingreso_animal,
+    created_at,
+    animals (
+      id,
+      arete,
+      nombre,
+      sexo,
+      categoria,
+      estado,
+      fecha_nacimiento,
+      peso_nacimiento,
+      peso_actual,
+      finalidad,
+      condicion_reproductiva
+    )
+  )
+`;
+
+const BATCH_SELECT = `
+  id,
+  fecha_venta,
+  comprador,
+  tipo_venta,
+  notas,
+  ingreso_total,
+  created_at,
+  updated_at,
+  sales (
+    ${SALE_SELECT}
+  )
+`;
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function normalizeRpcError(error) {
+  if (!error) return "Error desconocido";
+
+  return (
+    error.message || error.details || error.hint || "Error procesando la venta"
+  );
+}
+
+function normalizeBatch(batch) {
+  const sales = Array.isArray(batch?.sales) ? batch.sales : [];
+
+  const saleAnimals = sales.flatMap((sale) =>
+    Array.isArray(sale.sale_animals) ? sale.sale_animals : [],
+  );
+
+  const totalPesoVenta = saleAnimals.reduce(
+    (total, item) => total + Number(item.peso_venta_kg || 0),
+    0,
+  );
+
+  return {
+    ...batch,
+    sales,
+    animales: saleAnimals,
+    animales_count: saleAnimals.length,
+    peso_total_venta: Number(totalPesoVenta.toFixed(2)),
+  };
+}
+
+// ============================================================
+// CREAR VENTA POR LOTE
+// ============================================================
+
 exports.createSaleBatch = async (req, res) => {
   try {
     const { fecha_venta, comprador, tipo_venta, notas, animales } = req.body;
@@ -11,221 +106,268 @@ exports.createSaleBatch = async (req, res) => {
       });
     }
 
-    if (!animales || !Array.isArray(animales) || animales.length === 0) {
+    if (!Array.isArray(animales) || animales.length === 0) {
       return res.status(400).json({
         error: "Debe seleccionar al menos un animal",
       });
     }
 
-    // Crear lote
-    const { data: lote, error: loteError } = await supabase
-      .from("sales_batches")
-      .insert([
-        {
-          fecha_venta,
-          comprador: comprador || null,
-          tipo_venta: tipo_venta || "Pie",
-          notas: notas || null,
-          ingreso_total: 0,
-        },
-      ])
-      .select()
-      .single();
+    const ids = animales.map((animal) => animal?.id_animal);
 
-    if (loteError) throw loteError;
+    if (ids.some((id) => !id)) {
+      return res.status(400).json({
+        error: "Todos los animales deben tener un ID válido",
+      });
+    }
 
-    let ingresoTotal = 0;
-    const ventas = [];
+    if (new Set(ids).size !== ids.length) {
+      return res.status(400).json({
+        error: "No puede seleccionar el mismo animal dos veces",
+      });
+    }
 
-    for (const animalVenta of animales) {
-      const { id_animal, peso_venta_kg, precio_kg, rendimiento_canal } =
-        animalVenta;
+    const tipoVenta = tipo_venta || "Pie";
 
-      if (!id_animal) {
-        throw new Error("Uno de los animales no tiene ID");
+    if (!["Pie", "Canal"].includes(tipoVenta)) {
+      return res.status(400).json({
+        error: "El tipo de venta debe ser Pie o Canal",
+      });
+    }
+
+    const payload = {
+      fecha_venta,
+      comprador: comprador || null,
+      tipo_venta: tipoVenta,
+      notas: notas || null,
+      animales: animales.map((animal) => ({
+        id_animal: animal.id_animal,
+        peso_venta_kg: Number(animal.peso_venta_kg),
+        precio_kg: Number(animal.precio_kg),
+        rendimiento_canal:
+          animal.rendimiento_canal === "" ||
+          animal.rendimiento_canal === null ||
+          animal.rendimiento_canal === undefined
+            ? null
+            : Number(animal.rendimiento_canal),
+      })),
+    };
+
+    for (const animal of payload.animales) {
+      if (!Number.isFinite(animal.peso_venta_kg) || animal.peso_venta_kg <= 0) {
+        return res.status(400).json({
+          error: `Peso de venta inválido para el animal ${animal.id_animal}`,
+        });
+      }
+
+      if (!Number.isFinite(animal.precio_kg) || animal.precio_kg <= 0) {
+        return res.status(400).json({
+          error: `Precio por kg inválido para el animal ${animal.id_animal}`,
+        });
       }
 
       if (
-        peso_venta_kg === undefined ||
-        peso_venta_kg === null ||
-        peso_venta_kg === ""
+        animal.rendimiento_canal !== null &&
+        (!Number.isFinite(animal.rendimiento_canal) ||
+          animal.rendimiento_canal < 0 ||
+          animal.rendimiento_canal > 100)
       ) {
-        throw new Error("Todos los animales deben tener peso de venta");
+        return res.status(400).json({
+          error: `Rendimiento de canal inválido para el animal ${animal.id_animal}`,
+        });
       }
 
-      if (precio_kg === undefined || precio_kg === null || precio_kg === "") {
-        throw new Error("Todos los animales deben tener precio por kg");
-      }
-
-      // Obtener información actual del animal
-      const { data: animal, error: animalError } = await supabase
-        .from("animals")
-        .select("id, fecha_nacimiento, peso_nacimiento, peso_actual")
-        .eq("id", id_animal)
-        .single();
-
-      if (animalError) throw animalError;
-
-      const pesoVenta = Number(peso_venta_kg);
-      const precioKg = Number(precio_kg);
-
-      const ingresoTotalAnimal = pesoVenta * precioKg;
-
-      ingresoTotal += ingresoTotalAnimal;
-
-      // Edad al momento de venta
-      let edadDias = null;
-      let edadMeses = null;
-      let edadAnios = null;
-
-      if (animal.fecha_nacimiento) {
-        const nacimiento = new Date(animal.fecha_nacimiento);
-        const venta = new Date(fecha_venta);
-
-        edadDias = Math.floor((venta - nacimiento) / (1000 * 60 * 60 * 24));
-
-        edadMeses = Math.floor(edadDias / 30.4375);
-        edadAnios = Math.floor(edadDias / 365.25);
-      }
-
-      // Peso ganado desde nacimiento
-      let pesoGanado = null;
-      let gananciaDiaria = null;
-
-      if (
-        animal.peso_nacimiento !== null &&
-        animal.peso_nacimiento !== undefined &&
-        edadDias !== null &&
-        edadDias > 0
-      ) {
-        pesoGanado = pesoVenta - Number(animal.peso_nacimiento);
-
-        gananciaDiaria = pesoGanado / edadDias;
-      }
-
-      // Crear registro individual de venta
-      const { data: venta, error: ventaError } = await supabase
-        .from("sales")
-        .insert([
-          {
-            id_animal,
-            id_lote: lote.id,
-            fecha_venta,
-            comprador: comprador || null,
-            tipo_venta: tipo_venta || "Pie",
-            peso_venta_kg: pesoVenta,
-            precio_kg: precioKg,
-            rendimiento_canal:
-              rendimiento_canal !== undefined && rendimiento_canal !== ""
-                ? Number(rendimiento_canal)
-                : null,
-            ingreso_total: ingresoTotalAnimal,
-
-            edad_al_vender: edadDias,
-            dias_en_finca: null,
-            peso_ganado: pesoGanado,
-            ganancia_diaria: gananciaDiaria,
-          },
-        ])
-        .select()
-        .single();
-
-      if (ventaError) throw ventaError;
-
-      ventas.push(venta);
-
-      // Marcar animal como vendido
-      const { error: updateAnimalError } = await supabase
-        .from("animals")
-        .update({
-          estado: "Vendido",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id_animal);
-
-      if (updateAnimalError) {
-        throw updateAnimalError;
+      if (tipoVenta === "Canal" && animal.rendimiento_canal === null) {
+        return res.status(400).json({
+          error:
+            `Debe indicar el rendimiento de canal para el animal ` +
+            `${animal.id_animal}`,
+        });
       }
     }
 
-    // Actualizar total del lote
-    const { data: loteActualizado, error: updateLoteError } = await supabase
+    // ========================================================
+    // LA TRANSACCION REAL OCURRE EN POSTGRES
+    // ========================================================
+
+    const { data, error } = await supabase.rpc("create_sale_batch", {
+      p_payload: payload,
+    });
+
+    if (error) {
+      console.error("RPC create_sale_batch:", error);
+
+      return res.status(400).json({
+        error: normalizeRpcError(error),
+      });
+    }
+
+    const batchId = data?.id_lote;
+
+    if (!batchId) {
+      return res.status(500).json({
+        error: "La venta se registró pero no se recibió el ID del lote",
+      });
+    }
+
+    // Obtener inmediatamente el lote completo.
+    const { data: batch, error: batchError } = await supabase
       .from("sales_batches")
-      .update({
-        ingreso_total: ingresoTotal,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", lote.id)
-      .select()
+      .select(BATCH_SELECT)
+      .eq("id", batchId)
       .single();
 
-    if (updateLoteError) throw updateLoteError;
+    if (batchError) {
+      console.error("Error obteniendo venta recién creada:", batchError);
 
-    res.status(201).json({
+      return res.status(201).json({
+        success: true,
+        data,
+        warning:
+          "La venta fue registrada, pero no se pudo cargar el detalle inmediatamente.",
+      });
+    }
+
+    return res.status(201).json({
       success: true,
-      lote: loteActualizado,
-      ventas,
+      data: normalizeBatch(batch),
     });
   } catch (err) {
     console.error("Error creando venta por lote:", err);
 
-    res.status(400).json({
-      error: err.message,
+    return res.status(400).json({
+      error: err.message || "Error registrando la venta",
     });
   }
 };
 
-// Obtener lotes de ventas
+// ============================================================
+// OBTENER TODOS LOS LOTES
+// ============================================================
+
 exports.getSaleBatches = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("sales_batches")
-      .select("*")
+      .select(BATCH_SELECT)
       .order("fecha_venta", {
+        ascending: false,
+      })
+      .order("created_at", {
         ascending: false,
       });
 
     if (error) {
-      console.error("Error Supabase obteniendo lotes:", error);
+      console.error("Error obteniendo lotes:", error);
+
       return res.status(400).json({
         error: error.message,
       });
     }
 
-    res.json(data || []);
-  } catch (err) {
-    console.error("Error obteniendo ventas:", err);
+    const batches = (data || []).map(normalizeBatch);
 
-    res.status(400).json({
-      error: err.message,
+    return res.json(batches);
+  } catch (err) {
+    console.error("Error obteniendo historial de ventas:", err);
+
+    return res.status(400).json({
+      error: err.message || "Error obteniendo historial",
     });
   }
 };
 
-// Obtener un lote específico
+// ============================================================
+// OBTENER UN LOTE
+// ============================================================
+
 exports.getSaleBatch = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json({
+        error: "ID de lote requerido",
+      });
+    }
+
     const { data, error } = await supabase
       .from("sales_batches")
-      .select("*")
+      .select(BATCH_SELECT)
       .eq("id", id)
       .single();
 
     if (error) {
-      console.error("Error Supabase obteniendo lote:", error);
-      return res.status(400).json({
-        error: error.message,
+      console.error("Error obteniendo lote:", error);
+
+      return res.status(404).json({
+        error: "Venta no encontrada",
       });
     }
 
-    res.json(data);
+    return res.json(normalizeBatch(data));
   } catch (err) {
-    console.error("Error obteniendo lote:", err);
+    console.error("Error obteniendo detalle de venta:", err);
 
-    res.status(400).json({
-      error: err.message,
+    return res.status(400).json({
+      error: err.message || "Error obteniendo detalle",
+    });
+  }
+};
+
+// ============================================================
+// RESUMEN DE VENTAS
+// ============================================================
+
+exports.getSalesSummary = async (req, res) => {
+  try {
+    const { count: lotes, error: lotesError } = await supabase
+      .from("sales_batches")
+      .select("id", {
+        count: "exact",
+        head: true,
+      });
+
+    if (lotesError) {
+      throw lotesError;
+    }
+
+    const { data: batches, error: batchesError } = await supabase
+      .from("sales_batches")
+      .select("ingreso_total");
+
+    if (batchesError) {
+      throw batchesError;
+    }
+
+    const { count: animalesVendidos, error: animalesError } = await supabase
+      .from("sale_animals")
+      .select("id", {
+        count: "exact",
+        head: true,
+      });
+
+    if (animalesError) {
+      throw animalesError;
+    }
+
+    const ingresoTotal = (batches || []).reduce(
+      (total, batch) => total + Number(batch.ingreso_total || 0),
+      0,
+    );
+
+    const ticketPromedio = lotes > 0 ? ingresoTotal / lotes : 0;
+
+    return res.json({
+      lotes: lotes || 0,
+      animales_vendidos: animalesVendidos || 0,
+      ingreso_total: Number(ingresoTotal.toFixed(2)),
+      ticket_promedio: Number(ticketPromedio.toFixed(2)),
+    });
+  } catch (err) {
+    console.error("Error obteniendo resumen de ventas:", err);
+
+    return res.status(400).json({
+      error: err.message || "Error obteniendo resumen de ventas",
     });
   }
 };

@@ -9,9 +9,10 @@ const api = axios.create({
   },
 });
 
-// ===============================
-// ANIMALS
-// ===============================
+// ============================================================
+// ANIMALES
+// ============================================================
+
 export const animalService = {
   getAll: async () => {
     const response = await api.get("/animals");
@@ -30,106 +31,155 @@ export const animalService = {
 
   update: async (id, animal) => {
     const response = await api.put(`/animals/${id}`, animal);
+
     return response.data;
   },
 
   updateStatus: async (id, estado) => {
-    const response = await api.patch(`/animals/${id}/status`, {
-      estado,
-    });
-    return response.data;
-  },
+    const response = await api.patch(`/animals/${id}/status`, { estado });
 
-  registerDischarge: async (id, data) => {
-    const response = await api.post(`/animals/${id}/discharge`, data);
     return response.data;
   },
 
   syncCategories: async () => {
     const response = await api.post("/animals/sync-categories");
+
     return response.data;
   },
 
   deletePermanent: async (id) => {
     const response = await api.delete(`/animals/${id}/permanent`);
+
     return response.data;
   },
 };
 
-// ===============================
-// WEIGHTS
-// ===============================
+// ============================================================
+// PESOS
+// ============================================================
+
 export const weightService = {
   record: async (data) => {
     const response = await api.post("/weights", data);
+
     return response.data;
   },
 
-  getHistory: async (id_animal) => {
-    const response = await api.get(`/weights/${id_animal}`);
+  getHistory: async (animalId) => {
+    const response = await api.get(`/weights/${animalId}`);
+
     return response.data;
   },
 };
 
-// ===============================
-// PURCHASES
-// ===============================
+// ============================================================
+// COMPRAS
+// ============================================================
+
 export const purchaseService = {
-  create: (data) => api.post("/purchases", data),
+  create: async (data) => {
+    const response = await api.post("/purchases", data);
 
-  getAll: () => api.get("/purchases"),
+    return response.data;
+  },
+
+  getAll: async () => {
+    const response = await api.get("/purchases");
+    return response.data;
+  },
 };
 
-// ===============================
-// REPRODUCTION
-// ===============================
+// ============================================================
+// REPRODUCCION
+// ============================================================
+
 export const reproductionService = {
-  record: (data) => api.post("/reproduction", data),
+  record: async (data) => {
+    const response = await api.post("/reproduction", data);
 
-  getByAnimal: (animalId) => api.get(`/reproduction/${animalId}`),
+    return response.data;
+  },
+
+  getByAnimal: async (animalId) => {
+    const response = await api.get(`/reproduction/${animalId}`);
+
+    return response.data;
+  },
 };
 
-// ===============================
-// EXPENSES
-// ===============================
+// ============================================================
+// GASTOS
+// ============================================================
+
 export const expenseService = {
-  create: (data) => api.post("/expenses", data),
+  create: async (data) => {
+    const response = await api.post("/expenses", data);
 
-  getAll: () => api.get("/expenses"),
+    return response.data;
+  },
 
-  getSummary: () => api.get("/expenses/summary"),
+  getAll: async () => {
+    const response = await api.get("/expenses");
+    return response.data;
+  },
+
+  getSummary: async () => {
+    const response = await api.get("/expenses/summary");
+
+    return response.data;
+  },
 };
 
-// ===============================
-// REPORTS
-// ===============================
+// ============================================================
+// REPORTES
+// ============================================================
+
 export const reportService = {
-  getReproductiveReport: () => api.get("/reports/reproductive"),
+  getReproductiveReport: async () => {
+    const response = await api.get("/reports/reproductive");
 
-  getDiscardCandidates: () => api.get("/reports/discard-candidates"),
+    return response.data;
+  },
 
-  getFinancialSummary: () => api.get("/reports/financial-summary"),
+  getDiscardCandidates: async () => {
+    const response = await api.get("/reports/discard-candidates");
+
+    return response.data;
+  },
+
+  getFinancialSummary: async () => {
+    const response = await api.get("/reports/financial-summary");
+
+    return response.data;
+  },
 };
 
-// ===============================
-// SALES
-// ===============================
+// ============================================================
+// VENTAS
+// ============================================================
+
 export const saleService = {
-  // Crear una venta por lote
   createBatch: async (data) => {
     const response = await api.post("/sales/batch", data);
+
     return response.data;
   },
 
-  // Obtener todos los lotes vendidos
   getBatches: async () => {
     const response = await api.get("/sales/batches");
+
     return response.data;
   },
 
-  // Obtener un lote específico
   getBatchById: async (id) => {
     const response = await api.get(`/sales/batches/${id}`);
+
+    return response.data;
+  },
+
+  getSummary: async () => {
+    const response = await api.get("/sales/summary");
+
     return response.data;
   },
 };
