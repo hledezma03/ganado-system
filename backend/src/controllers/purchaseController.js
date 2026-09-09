@@ -1,143 +1,23 @@
 const supabase = require("../config/database");
 
-const parseNumber = (value) => {
+const toNumber = (value, defaultValue = 0) => {
+  if (value === null || value === undefined || value === "") {
+    return defaultValue;
+  }
+
   const number = Number(value);
 
-  return Number.isFinite(number) ? number : null;
+  return Number.isFinite(number) ? number : defaultValue;
 };
 
-const validatePurchaseData = ({
-  id_animal,
-  fecha_compra,
-  peso_recepcion,
-  precio_unitario,
-  precio_total,
-  costo_flete,
-}) => {
-  if (!id_animal) {
-    return "El animal es obligatorio";
-  }
-
-  if (!fecha_compra) {
-    return "La fecha de compra es obligatoria";
-  }
-
-  const date = new Date(`${fecha_compra}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return "La fecha de compra no es válida";
-  }
-
-  const peso = parseNumber(peso_recepcion);
-  const precioUnitario = parseNumber(precio_unitario);
-  const precioTotal = parseNumber(precio_total);
-  const flete =
-    costo_flete === undefined || costo_flete === null || costo_flete === ""
-      ? 0
-      : parseNumber(costo_flete);
-
-  if (peso === null || peso <= 0) {
-    return "El peso de recepción debe ser mayor que cero";
-  }
-
-  if (precioUnitario === null || precioUnitario <= 0) {
-    return "El precio por kg debe ser mayor que cero";
-  }
-
-  if (precioTotal === null || precioTotal <= 0) {
-    return "El precio total debe ser mayor que cero";
-  }
-
-  if (flete === null || flete < 0) {
-    return "El costo de flete no puede ser negativo";
-  }
-
-  return null;
-};
-
-const getAnimal = async (id_animal) => {
-  const { data, error } = await supabase
-    .from("animals")
-    .select("id, arete, nombre, estado, peso_actual")
-    .eq("id", id_animal)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-};
-
-const getLatestWeightOnOrBeforeDate = async (id_animal, fecha_compra) => {
-  const { data, error } = await supabase
-    .from("weights")
-    .select("id, peso_kg, fecha_pesaje")
-    .eq("id_animal", id_animal)
-    .lte("fecha_pesaje", fecha_compra)
-    .order("fecha_pesaje", {
-      ascending: false,
-    })
-    .limit(1);
-
-  if (error) {
-    throw error;
-  }
-
-  return data?.[0] || null;
-};
-
-const updateAnimalWeightIfAppropriate = async ({
-  id_animal,
-  peso_recepcion,
-  fecha_compra,
-}) => {
-  const latestWeight = await getLatestWeightOnOrBeforeDate(
-    id_animal,
-    fecha_compra,
-  );
-
-  /*
-   * La compra representa el peso confirmado al momento
-   * de entrada del animal.
-   *
-   * Si existe un pesaje posterior, no lo reemplazamos.
-   */
-  const { data: futureWeights, error } = await supabase
-    .from("weights")
-    .select("id, peso_kg, fecha_pesaje")
-    .eq("id_animal", id_animal)
-    .gt("fecha_pesaje", fecha_compra)
-    .order("fecha_pesaje", {
-      ascending: false,
-    })
-    .limit(1);
-
-  if (error) {
-    throw error;
-  }
-
-  if (futureWeights?.length > 0) {
-    return;
-  }
-
-  const pesoActual = latestWeight?.peso_kg ?? peso_recepcion;
-
-  const { error: updateError } = await supabase
-    .from("animals")
-    .update({
-      peso_actual: pesoActual,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id_animal);
-
-  if (updateError) {
-    throw updateError;
-  }
+const round = (value, decimals = 2) => {
+  const factor = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
 };
 
 // ============================================================
-// CREAR COMPRA
+// CREAR COMPRA INDIVIDUAL
+// Mantiene compatibilidad con registros antiguos.
 // ============================================================
 
 exports.createPurchase = async (req, res) => {
@@ -152,65 +32,38 @@ exports.createPurchase = async (req, res) => {
       costo_flete,
     } = req.body;
 
-    const validationError = validatePurchaseData({
-      id_animal,
-      fecha_compra,
-      peso_recepcion,
-      precio_unitario,
-      precio_total,
-      costo_flete,
-    });
-
-    if (validationError) {
+    if (!id_animal) {
       return res.status(400).json({
-        error: validationError,
+        error: "El animal es obligatorio",
       });
     }
 
-    const animal = await getAnimal(id_animal);
-
-    if (!animal) {
-      return res.status(404).json({
-        error: "El animal no existe",
-      });
-    }
-
-    if (animal.estado && animal.estado !== "Activo") {
+    if (!fecha_compra) {
       return res.status(400).json({
-        error: "Solo se puede registrar la compra de un animal activo",
+        error: "La fecha de compra es obligatoria",
       });
     }
 
-    /*
-     * El diseño actual de purchases representa la adquisición
-     * inicial de un animal. Por eso evitamos registrar dos
-     * compras para el mismo animal.
-     */
-    const { data: existingPurchase, error: existingError } = await supabase
-      .from("purchases")
-      .select("id")
-      .eq("id_animal", id_animal)
-      .limit(1);
+    const peso = toNumber(peso_recepcion);
+    const precioUnitario = toNumber(precio_unitario);
+    const precioTotal = toNumber(precio_total);
+    const flete = toNumber(costo_flete);
 
-    if (existingError) {
-      throw existingError;
-    }
-
-    if (existingPurchase?.length > 0) {
+    if (peso <= 0) {
       return res.status(400).json({
-        error: "Este animal ya tiene una compra registrada",
+        error: "El peso de recepción debe ser mayor que 0",
       });
     }
 
-    const peso = parseNumber(peso_recepcion);
-    const precioUnitario = parseNumber(precio_unitario);
-    const precioTotal = parseNumber(precio_total);
-    const flete =
-      costo_flete === undefined || costo_flete === null || costo_flete === ""
-        ? 0
-        : parseNumber(costo_flete);
+    if (precioTotal <= 0) {
+      return res.status(400).json({
+        error: "El precio total debe ser mayor que 0",
+      });
+    }
 
-    const costoKgComprado = precioTotal / peso;
+    const costoAdquisicion = precioTotal + flete;
+
+    const costoKg = costoAdquisicion / peso;
 
     const { data, error } = await supabase
       .from("purchases")
@@ -218,41 +71,22 @@ exports.createPurchase = async (req, res) => {
         {
           id_animal,
           fecha_compra,
-          proveedor: proveedor?.trim() || null,
+          proveedor: proveedor || null,
           peso_recepcion: peso,
           precio_unitario: precioUnitario,
           precio_total: precioTotal,
           costo_flete: flete,
-          costo_kg_comprado: Number(costoKgComprado.toFixed(2)),
+          flete_asignado: flete,
+          costo_adquisicion: round(costoAdquisicion),
+          costo_kg_comprado: round(costoKg),
         },
       ])
-      .select(
-        `
-        *,
-        animals (
-          id,
-          arete,
-          nombre,
-          estado
-        )
-        `,
-      )
+      .select()
       .single();
 
     if (error) {
       throw error;
     }
-
-    /*
-     * El peso de recepción es un peso real confirmado.
-     * Lo usamos como peso actual cuando no existe un pesaje
-     * posterior que deba prevalecer.
-     */
-    await updateAnimalWeightIfAppropriate({
-      id_animal,
-      peso_recepcion: peso,
-      fecha_compra,
-    });
 
     res.status(201).json({
       success: true,
@@ -262,18 +96,384 @@ exports.createPurchase = async (req, res) => {
     console.error("Error creando compra:", err);
 
     res.status(400).json({
-      error: err?.message || "Error registrando la compra",
+      error: err.message,
     });
   }
 };
 
 // ============================================================
-// OBTENER TODAS LAS COMPRAS
+// CREAR COMPRA POR LOTE
+// ============================================================
+
+exports.createPurchaseBatch = async (req, res) => {
+  try {
+    const { fecha_compra, proveedor, flete_total, notas, animales } = req.body;
+
+    if (!fecha_compra) {
+      return res.status(400).json({
+        error: "La fecha de compra es obligatoria",
+      });
+    }
+
+    if (!Array.isArray(animales) || animales.length === 0) {
+      return res.status(400).json({
+        error: "Debes seleccionar al menos un animal",
+      });
+    }
+
+    const fleteTotal = toNumber(flete_total);
+
+    if (fleteTotal < 0) {
+      return res.status(400).json({
+        error: "El flete no puede ser negativo",
+      });
+    }
+
+    // Evitar animales repetidos
+    const ids = animales.map((animal) => animal.id_animal);
+
+    const idsUnicos = new Set(ids);
+
+    if (idsUnicos.size !== ids.length) {
+      return res.status(400).json({
+        error: "No puedes registrar el mismo animal dos veces en una compra",
+      });
+    }
+
+    // ========================================================
+    // OBTENER ANIMALES
+    // ========================================================
+
+    const { data: animalsData, error: animalsError } = await supabase
+      .from("animals")
+      .select("id, arete, nombre, estado")
+      .in("id", ids);
+
+    if (animalsError) {
+      throw animalsError;
+    }
+
+    if (!animalsData || animalsData.length !== ids.length) {
+      return res.status(400).json({
+        error: "Uno o más animales seleccionados no existen",
+      });
+    }
+
+    // Un animal ya comprado no debe recibir otra compra inicial.
+    const { data: existingPurchases, error: existingError } = await supabase
+      .from("purchases")
+      .select("id_animal")
+      .in("id_animal", ids);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existingPurchases && existingPurchases.length > 0) {
+      const duplicatedIds = new Set(
+        existingPurchases.map((purchase) => purchase.id_animal),
+      );
+
+      const duplicatedAnimals = animalsData
+        .filter((animal) => duplicatedIds.has(animal.id))
+        .map((animal) => animal.arete || animal.id);
+
+      return res.status(400).json({
+        error: `Los siguientes animales ya tienen una compra registrada: ${duplicatedAnimals.join(
+          ", ",
+        )}`,
+      });
+    }
+
+    // ========================================================
+    // VALIDAR DETALLES
+    // ========================================================
+
+    const details = [];
+
+    for (const animal of animales) {
+      const peso = toNumber(animal.peso_recepcion);
+      const precioTotal = toNumber(animal.precio_total);
+
+      if (peso <= 0) {
+        return res.status(400).json({
+          error: `El peso de recepción de ${animal.arete || animal.id} debe ser mayor que 0`,
+        });
+      }
+
+      if (precioTotal <= 0) {
+        return res.status(400).json({
+          error: `El precio de compra de ${animal.arete || animal.id} debe ser mayor que 0`,
+        });
+      }
+
+      details.push({
+        id_animal: animal.id_animal,
+        peso_recepcion: peso,
+        precio_unitario: toNumber(animal.precio_unitario, precioTotal / peso),
+        precio_total: precioTotal,
+      });
+    }
+
+    // ========================================================
+    // DISTRIBUIR FLETE
+    // ========================================================
+
+    const cantidadAnimales = details.length;
+
+    const fleteBase = cantidadAnimales > 0 ? fleteTotal / cantidadAnimales : 0;
+
+    const subtotalAnimales = details.reduce(
+      (sum, detail) => sum + detail.precio_total,
+      0,
+    );
+
+    const detallesFinales = details.map((detail, index) => {
+      // Para evitar diferencias por redondeo, el último animal
+      // absorbe los centavos restantes.
+      let fleteAsignado = round(fleteBase);
+
+      if (index === details.length - 1) {
+        const fleteAnterior = details
+          .slice(0, -1)
+          .reduce(
+            (sum, item, itemIndex) =>
+              sum + round(item.precio_total >= 0 ? fleteBase : 0),
+            0,
+          );
+
+        fleteAsignado = round(fleteTotal - fleteAnterior);
+      }
+
+      const costoAdquisicion = detail.precio_total + fleteAsignado;
+
+      const costoKgComprado =
+        detail.peso_recepcion > 0
+          ? costoAdquisicion / detail.peso_recepcion
+          : 0;
+
+      return {
+        ...detail,
+        flete_asignado: round(fleteAsignado),
+        costo_adquisicion: round(costoAdquisicion),
+        costo_kg_comprado: round(costoKgComprado),
+      };
+    });
+
+    // Corregir exactamente cualquier diferencia de redondeo.
+    const fleteDistribuido = detallesFinales.reduce(
+      (sum, detail) => sum + detail.flete_asignado,
+      0,
+    );
+
+    const diferenciaFlete = round(fleteTotal - fleteDistribuido);
+
+    if (diferenciaFlete !== 0 && detallesFinales.length > 0) {
+      const ultimo = detallesFinales[detallesFinales.length - 1];
+
+      ultimo.flete_asignado = round(ultimo.flete_asignado + diferenciaFlete);
+
+      ultimo.costo_adquisicion = round(
+        ultimo.precio_total + ultimo.flete_asignado,
+      );
+
+      ultimo.costo_kg_comprado = round(
+        ultimo.costo_adquisicion / ultimo.peso_recepcion,
+      );
+    }
+
+    const inversionTotal = round(subtotalAnimales + fleteTotal);
+
+    // ========================================================
+    // CREAR LOTE
+    // ========================================================
+
+    const { data: lote, error: loteError } = await supabase
+      .from("purchase_batches")
+      .insert([
+        {
+          fecha_compra,
+          proveedor: proveedor?.trim() || null,
+          flete_total: round(fleteTotal),
+          subtotal_animales: round(subtotalAnimales),
+          inversion_total: inversionTotal,
+          notas: notas?.trim() || null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (loteError) {
+      throw loteError;
+    }
+
+    // ========================================================
+    // CREAR DETALLES
+    // ========================================================
+
+    const purchasesToInsert = detallesFinales.map((detail) => ({
+      id_animal: detail.id_animal,
+      id_lote: lote.id,
+      fecha_compra,
+      proveedor: proveedor?.trim() || null,
+      peso_recepcion: detail.peso_recepcion,
+      precio_unitario: detail.precio_unitario,
+      precio_total: detail.precio_total,
+      costo_flete: detail.flete_asignado,
+      flete_asignado: detail.flete_asignado,
+      costo_adquisicion: detail.costo_adquisicion,
+      costo_kg_comprado: detail.costo_kg_comprado,
+    }));
+
+    const { data: purchases, error: purchasesError } = await supabase
+      .from("purchases")
+      .insert(purchasesToInsert)
+      .select(
+        `
+        *,
+        animals (
+          id,
+          arete,
+          nombre,
+          sexo,
+          categoria
+        )
+        `,
+      );
+
+    if (purchasesError) {
+      // Intentar limpiar el lote si los detalles fallan.
+      await supabase.from("purchase_batches").delete().eq("id", lote.id);
+
+      throw purchasesError;
+    }
+
+    res.status(201).json({
+      success: true,
+      lote: {
+        ...lote,
+        purchases,
+      },
+    });
+  } catch (err) {
+    console.error("Error creando compra por lote:", err);
+
+    res.status(400).json({
+      error: err.message,
+    });
+  }
+};
+
+// ============================================================
+// HISTORIAL DE LOTES
+// ============================================================
+
+exports.getPurchaseBatches = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("purchase_batches")
+      .select(
+        `
+        *,
+        purchases (
+          id,
+          id_animal,
+          fecha_compra,
+          proveedor,
+          peso_recepcion,
+          precio_unitario,
+          precio_total,
+          costo_flete,
+          flete_asignado,
+          costo_adquisicion,
+          costo_kg_comprado,
+          animals (
+            id,
+            arete,
+            nombre,
+            sexo,
+            categoria
+          )
+        )
+        `,
+      )
+      .order("fecha_compra", {
+        ascending: false,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    res.json(data || []);
+  } catch (err) {
+    console.error("Error obteniendo lotes de compras:", err);
+
+    res.status(400).json({
+      error: err.message,
+    });
+  }
+};
+
+// ============================================================
+// DETALLE DE LOTE
+// ============================================================
+
+exports.getPurchaseBatch = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from("purchase_batches")
+      .select(
+        `
+        *,
+        purchases (
+          id,
+          id_animal,
+          fecha_compra,
+          proveedor,
+          peso_recepcion,
+          precio_unitario,
+          precio_total,
+          costo_flete,
+          flete_asignado,
+          costo_adquisicion,
+          costo_kg_comprado,
+          animals (
+            id,
+            arete,
+            nombre,
+            sexo,
+            categoria
+          )
+        )
+        `,
+      )
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error("Error obteniendo detalle de compra:", err);
+
+    res.status(400).json({
+      error: err.message,
+    });
+  }
+};
+
+// ============================================================
+// HISTORIAL INDIVIDUAL / COMPATIBILIDAD
 // ============================================================
 
 exports.getPurchases = async (req, res) => {
   try {
-    const { startDate, endDate, id_animal, proveedor } = req.query;
+    const { startDate, endDate } = req.query;
 
     let query = supabase.from("purchases").select(
       `
@@ -283,8 +483,7 @@ exports.getPurchases = async (req, res) => {
           arete,
           nombre,
           sexo,
-          categoria,
-          estado
+          categoria
         )
         `,
     );
@@ -295,14 +494,6 @@ exports.getPurchases = async (req, res) => {
 
     if (endDate) {
       query = query.lte("fecha_compra", endDate);
-    }
-
-    if (id_animal) {
-      query = query.eq("id_animal", id_animal);
-    }
-
-    if (proveedor) {
-      query = query.ilike("proveedor", `%${proveedor}%`);
     }
 
     const { data, error } = await query.order("fecha_compra", {
@@ -318,13 +509,13 @@ exports.getPurchases = async (req, res) => {
     console.error("Error obteniendo compras:", err);
 
     res.status(400).json({
-      error: err?.message || "Error obteniendo compras",
+      error: err.message,
     });
   }
 };
 
 // ============================================================
-// OBTENER COMPRA DE UN ANIMAL
+// COMPRA DE UN ANIMAL
 // ============================================================
 
 exports.getPurchaseByAnimal = async (req, res) => {
@@ -336,17 +527,21 @@ exports.getPurchaseByAnimal = async (req, res) => {
       .select(
         `
         *,
-        animals (
+        purchase_batches (
           id,
-          arete,
-          nombre,
-          sexo,
-          categoria,
-          estado
+          fecha_compra,
+          proveedor,
+          flete_total,
+          subtotal_animales,
+          inversion_total
         )
         `,
       )
       .eq("id_animal", id_animal)
+      .order("fecha_compra", {
+        ascending: false,
+      })
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -358,13 +553,13 @@ exports.getPurchaseByAnimal = async (req, res) => {
     console.error("Error obteniendo compra del animal:", err);
 
     res.status(400).json({
-      error: err?.message || "Error obteniendo compra",
+      error: err.message,
     });
   }
 };
 
 // ============================================================
-// ACTUALIZAR COMPRA
+// ACTUALIZAR COMPRA INDIVIDUAL
 // ============================================================
 
 exports.updatePurchase = async (req, res) => {
@@ -372,7 +567,6 @@ exports.updatePurchase = async (req, res) => {
     const { id } = req.params;
 
     const {
-      id_animal,
       fecha_compra,
       proveedor,
       peso_recepcion,
@@ -381,132 +575,58 @@ exports.updatePurchase = async (req, res) => {
       costo_flete,
     } = req.body;
 
-    const validationError = validatePurchaseData({
-      id_animal,
-      fecha_compra,
-      peso_recepcion,
-      precio_unitario,
-      precio_total,
-      costo_flete,
-    });
+    const peso = toNumber(peso_recepcion);
+    const precioUnitario = toNumber(precio_unitario);
+    const precioTotal = toNumber(precio_total);
+    const flete = toNumber(costo_flete);
 
-    if (validationError) {
+    if (peso <= 0) {
       return res.status(400).json({
-        error: validationError,
+        error: "El peso debe ser mayor que 0",
       });
     }
 
-    const { data: currentPurchase, error: currentError } = await supabase
-      .from("purchases")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (currentError) {
-      throw currentError;
-    }
-
-    const animal = await getAnimal(id_animal);
-
-    if (!animal) {
-      return res.status(404).json({
-        error: "El animal no existe",
-      });
-    }
-
-    if (animal.estado && animal.estado !== "Activo") {
+    if (precioTotal <= 0) {
       return res.status(400).json({
-        error: "Solo se puede asociar una compra a un animal activo",
+        error: "El precio total debe ser mayor que 0",
       });
     }
 
-    /*
-     * Si se cambia de animal, verificamos que el nuevo animal
-     * no tenga otra compra.
-     */
-    if (id_animal !== currentPurchase.id_animal) {
-      const { data: duplicate, error: duplicateError } = await supabase
-        .from("purchases")
-        .select("id")
-        .eq("id_animal", id_animal)
-        .neq("id", id)
-        .limit(1);
-
-      if (duplicateError) {
-        throw duplicateError;
-      }
-
-      if (duplicate?.length > 0) {
-        return res.status(400).json({
-          error: "El nuevo animal ya tiene una compra registrada",
-        });
-      }
-    }
-
-    const peso = parseNumber(peso_recepcion);
-    const precioUnitario = parseNumber(precio_unitario);
-    const precioTotal = parseNumber(precio_total);
-    const flete =
-      costo_flete === undefined || costo_flete === null || costo_flete === ""
-        ? 0
-        : parseNumber(costo_flete);
-
-    const costoKgComprado = precioTotal / peso;
+    const costoAdquisicion = precioTotal + flete;
 
     const { data, error } = await supabase
       .from("purchases")
       .update({
-        id_animal,
         fecha_compra,
-        proveedor: proveedor?.trim() || null,
+        proveedor: proveedor || null,
         peso_recepcion: peso,
         precio_unitario: precioUnitario,
         precio_total: precioTotal,
         costo_flete: flete,
-        costo_kg_comprado: Number(costoKgComprado.toFixed(2)),
-        updated_at: new Date().toISOString(),
+        flete_asignado: flete,
+        costo_adquisicion: round(costoAdquisicion),
+        costo_kg_comprado: round(costoAdquisicion / peso),
       })
       .eq("id", id)
-      .select(
-        `
-        *,
-        animals (
-          id,
-          arete,
-          nombre,
-          sexo,
-          categoria,
-          estado
-        )
-        `,
-      )
+      .select()
       .single();
 
     if (error) {
       throw error;
     }
 
-    await updateAnimalWeightIfAppropriate({
-      id_animal,
-      peso_recepcion: peso,
-      fecha_compra,
-    });
-
-    res.json({
-      success: true,
-      data,
-    });
+    res.json(data);
   } catch (err) {
     console.error("Error actualizando compra:", err);
 
     res.status(400).json({
-      error: err?.message || "Error actualizando compra",
+      error: err.message,
     });
   }
 };
 
 // ============================================================
-// ELIMINAR COMPRA
+// ELIMINAR COMPRA INDIVIDUAL
 // ============================================================
 
 exports.deletePurchase = async (req, res) => {
@@ -515,7 +635,7 @@ exports.deletePurchase = async (req, res) => {
 
     const { data: purchase, error: findError } = await supabase
       .from("purchases")
-      .select("id, id_animal, peso_recepcion, fecha_compra")
+      .select("id_lote")
       .eq("id", id)
       .single();
 
@@ -529,22 +649,54 @@ exports.deletePurchase = async (req, res) => {
       throw error;
     }
 
-    /*
-     * No modificamos peso_actual al borrar una compra.
-     * El peso del animal pertenece al historial de pesos y no
-     * debe desaparecer automáticamente por eliminar un registro
-     * financiero.
-     */
+    // Si pertenece a un lote, recalcular sus totales.
+    if (purchase?.id_lote) {
+      await recalculateBatch(purchase.id_lote);
+    }
 
     res.json({
       success: true,
-      data: purchase,
     });
   } catch (err) {
     console.error("Error eliminando compra:", err);
 
     res.status(400).json({
-      error: err?.message || "Error eliminando compra",
+      error: err.message,
     });
   }
+};
+
+// ============================================================
+// RECALCULAR LOTE
+// ============================================================
+
+const recalculateBatch = async (batchId) => {
+  const { data: purchases, error } = await supabase
+    .from("purchases")
+    .select("precio_total, flete_asignado")
+    .eq("id_lote", batchId);
+
+  if (error) {
+    throw error;
+  }
+
+  const subtotal = (purchases || []).reduce(
+    (sum, item) => sum + toNumber(item.precio_total),
+    0,
+  );
+
+  const flete = (purchases || []).reduce(
+    (sum, item) => sum + toNumber(item.flete_asignado),
+    0,
+  );
+
+  await supabase
+    .from("purchase_batches")
+    .update({
+      subtotal_animales: round(subtotal),
+      flete_total: round(flete),
+      inversion_total: round(subtotal + flete),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", batchId);
 };

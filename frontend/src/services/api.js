@@ -16,25 +16,21 @@ const api = axios.create({
 export const animalService = {
   getAll: async () => {
     const response = await api.get("/animals");
-
     return response.data;
   },
 
   getById: async (id) => {
     const response = await api.get(`/animals/${id}`);
-
     return response.data;
   },
 
   create: async (animal) => {
     const response = await api.post("/animals", animal);
-
     return response.data;
   },
 
   update: async (id, animal) => {
     const response = await api.put(`/animals/${id}`, animal);
-
     return response.data;
   },
 
@@ -64,7 +60,6 @@ export const animalService = {
 export const weightService = {
   record: async (data) => {
     const response = await api.post("/weights", data);
-
     return response.data;
   },
 
@@ -82,18 +77,39 @@ export const weightService = {
 export const purchaseService = {
   create: async (data) => {
     const response = await api.post("/purchases", data);
+    return response.data;
+  },
+
+  createBatch: async (data) => {
+    const response = await api.post("/purchases/batch", data);
 
     return response.data;
   },
 
   getAll: async (params = {}) => {
-    const response = await api.get("/purchases", { params });
+    const response = await api.get("/purchases", {
+      params,
+    });
+
+    return response.data;
+  },
+
+  getBatches: async (params = {}) => {
+    const response = await api.get("/purchases/batches", {
+      params,
+    });
+
+    return response.data;
+  },
+
+  getBatchById: async (id) => {
+    const response = await api.get(`/purchases/batches/${id}`);
 
     return response.data;
   },
 
   getByAnimal: async (animalId) => {
-    const response = await api.get(`/purchases/${animalId}`);
+    const response = await api.get(`/purchases/animal/${animalId}`);
 
     return response.data;
   },
@@ -112,7 +128,7 @@ export const purchaseService = {
 };
 
 // ============================================================
-// REPRODUCCION
+// REPRODUCCIÓN
 // ============================================================
 
 export const reproductionService = {
@@ -175,6 +191,12 @@ export const reportService = {
 
     return response.data;
   },
+
+  getAnimalPerformance: async (animalId) => {
+    const response = await api.get(`/reports/performance/${animalId}`);
+
+    return response.data;
+  },
 };
 
 // ============================================================
@@ -200,8 +222,8 @@ export const saleService = {
     return response.data;
   },
 
-  getSummary: async (params = {}) => {
-    const response = await api.get("/sales/summary", { params });
+  getSummary: async () => {
+    const response = await api.get("/sales/summary");
 
     return response.data;
   },

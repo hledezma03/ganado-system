@@ -1,183 +1,113 @@
 import React, { useEffect, useMemo, useState } from "react";
+
 import toast from "react-hot-toast";
+
 import { animalService, purchaseService } from "../services/api";
 
-const getToday = () => new Date().toISOString().split("T")[0];
-
-const emptyForm = () => ({
-  id_animal: "",
-  fecha_compra: getToday(),
+const INITIAL_FORM = {
+  fecha_compra: new Date().toISOString().split("T")[0],
   proveedor: "",
-  peso_recepcion: "",
-  precio_unitario: "",
-  precio_total: "",
-  costo_flete: "",
-});
+  flete_total: "",
+  notas: "",
+};
 
-const formatMoney = (value) => {
-  const number = Number(value || 0);
-
-  return `$${number.toLocaleString("en-US", {
+const money = (value) =>
+  Number(value || 0).toLocaleString("es-VE", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
-};
+  });
+
+const number = (value) =>
+  Number(value || 0).toLocaleString("es-VE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export default function PurchasesPage() {
   const [animals, setAnimals] = useState([]);
-  const [purchases, setPurchases] = useState([]);
+  const [batches, setBatches] = useState([]);
 
-  const [form, setForm] = useState(emptyForm());
-
-  const [animalSearch, setAnimalSearch] = useState("");
-  const [showAnimalResults, setShowAnimalResults] = useState(false);
-
-  const [editingId, setEditingId] = useState(null);
-
-  const [loadingAnimals, setLoadingAnimals] = useState(true);
-  const [loadingPurchases, setLoadingPurchases] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [selectedAnimals, setSelectedAnimals] = useState([]);
+
+  const [purchaseData, setPurchaseData] = useState({});
+
+  const [form, setForm] = useState(INITIAL_FORM);
+
+  const [selectedBatch, setSelectedBatch] = useState(null);
+
+  const [loadingBatch, setLoadingBatch] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
+  // ==========================================================
+  // CARGAR DATOS
+  // ==========================================================
+
   const loadData = async () => {
-    await Promise.all([fetchAnimals(), fetchPurchases()]);
-  };
-
-  const fetchAnimals = async () => {
     try {
-      setLoadingAnimals(true);
+      setLoading(true);
 
-      const data = await animalService.getAll();
+      const [animalsResponse, batchesResponse] = await Promise.all([
+        animalService.getAll(),
+        purchaseService.getBatches(),
+      ]);
 
-      const list = Array.isArray(data) ? data : data?.data || [];
+      const animalList = Array.isArray(animalsResponse)
+        ? animalsResponse
+        : animalsResponse?.data || [];
 
-      setAnimals(list);
-    } catch (err) {
-      console.error("Error cargando animales:", err);
+      const batchList = Array.isArray(batchesResponse)
+        ? batchesResponse
+        : batchesResponse?.data || [];
 
-      setAnimals([]);
-
-      toast.error(err?.response?.data?.error || "Error cargando animales");
-    } finally {
-      setLoadingAnimals(false);
-    }
-  };
-
-  const fetchPurchases = async () => {
-    try {
-      setLoadingPurchases(true);
-
-      const data = await purchaseService.getAll();
-
-      const list = Array.isArray(data) ? data : data?.data || [];
-
-      setPurchases(list);
+      setAnimals(animalList);
+      setBatches(batchList);
     } catch (err) {
       console.error("Error cargando compras:", err);
 
-      setPurchases([]);
-
       toast.error(
-        err?.response?.data?.error || "Error cargando historial de compras",
+        err?.response?.data?.error || "Error cargando información de compras",
       );
     } finally {
-      setLoadingPurchases(false);
+      setLoading(false);
     }
   };
 
-  const purchasedAnimalIds = useMemo(() => {
-    return new Set(
-      purchases
-        .filter((purchase) => purchase.id_animal)
-        .map((purchase) => purchase.id_animal),
-    );
-  }, [purchases]);
+  // ==========================================================
+  // ANIMALES DISPONIBLES
+  // ==========================================================
 
   const availableAnimals = useMemo(() => {
-    return animals.filter((animal) => {
-      if (animal.estado && animal.estado !== "Activo") {
-        return false;
-      }
-
-      if (editingId && form.id_animal === animal.id) {
-        return true;
-      }
-
-      return !purchasedAnimalIds.has(animal.id);
-    });
-  }, [animals, purchasedAnimalIds, editingId, form.id_animal]);
+    return animals.filter(
+      (animal) => animal.estado === "Activo" && !animal.compra_registrada,
+    );
+  }, [animals]);
 
   const filteredAnimals = useMemo(() => {
-    const search = animalSearch.trim().toLowerCase();
+    const term = search.toLowerCase().trim();
 
-    if (!search) {
-      return availableAnimals.slice(0, 20);
+    if (!term) {
+      return availableAnimals;
     }
 
-    return availableAnimals
-      .filter((animal) => {
-        const id = String(animal.id || "").toLowerCase();
-        const arete = String(animal.arete || "").toLowerCase();
-        const nombre = String(animal.nombre || "").toLowerCase();
+    return availableAnimals.filter(
+      (animal) =>
+        animal.arete?.toLowerCase().includes(term) ||
+        animal.nombre?.toLowerCase().includes(term),
+    );
+  }, [availableAnimals, search]);
 
-        return (
-          id.includes(search) ||
-          arete.includes(search) ||
-          nombre.includes(search)
-        );
-      })
-      .slice(0, 20);
-  }, [animalSearch, availableAnimals]);
+  // ==========================================================
+  // FORMULARIO
+  // ==========================================================
 
-  const selectedAnimal = useMemo(() => {
-    return animals.find((animal) => animal.id === form.id_animal) || null;
-  }, [animals, form.id_animal]);
-
-  const investmentTotal = useMemo(() => {
-    const price = Number(form.precio_total || 0);
-    const freight = Number(form.costo_flete || 0);
-
-    return price + freight;
-  }, [form.precio_total, form.costo_flete]);
-
-  const costPerKg = useMemo(() => {
-    const weight = Number(form.peso_recepcion || 0);
-
-    if (!weight || weight <= 0) {
-      return 0;
-    }
-
-    return investmentTotal / weight;
-  }, [investmentTotal, form.peso_recepcion]);
-
-  const handleAnimalSelect = (animal) => {
-    setForm((prev) => ({
-      ...prev,
-      id_animal: animal.id,
-      peso_recepcion:
-        animal.peso_actual !== null && animal.peso_actual !== undefined
-          ? animal.peso_actual
-          : "",
-    }));
-
-    setAnimalSearch("");
-    setShowAnimalResults(false);
-  };
-
-  const clearSelectedAnimal = () => {
-    setForm((prev) => ({
-      ...prev,
-      id_animal: "",
-      peso_recepcion: "",
-    }));
-
-    setAnimalSearch("");
-  };
-
-  const handleChange = (e) => {
+  const handleFormChange = (e) => {
     const { name, value } = e.target;
 
     setForm((prev) => ({
@@ -186,600 +116,580 @@ export default function PurchasesPage() {
     }));
   };
 
-  const resetForm = () => {
-    setForm(emptyForm());
-    setAnimalSearch("");
-    setEditingId(null);
-    setShowAnimalResults(false);
+  // ==========================================================
+  // SELECCIÓN
+  // ==========================================================
+
+  const toggleAnimal = (animal) => {
+    const exists = selectedAnimals.some((item) => item.id === animal.id);
+
+    if (exists) {
+      setSelectedAnimals((prev) =>
+        prev.filter((item) => item.id !== animal.id),
+      );
+
+      setPurchaseData((prev) => {
+        const copy = {
+          ...prev,
+        };
+
+        delete copy[animal.id];
+
+        return copy;
+      });
+
+      return;
+    }
+
+    setSelectedAnimals((prev) => [...prev, animal]);
+
+    setPurchaseData((prev) => ({
+      ...prev,
+      [animal.id]: {
+        peso_recepcion: animal.peso_actual ?? "",
+        precio_total: "",
+      },
+    }));
   };
 
-  const validateForm = () => {
-    if (!form.id_animal) {
-      toast.error("Debes seleccionar un animal");
-      return false;
+  const selectAllFiltered = () => {
+    const newAnimals = filteredAnimals.filter(
+      (animal) =>
+        !selectedAnimals.some((selected) => selected.id === animal.id),
+    );
+
+    if (newAnimals.length === 0) {
+      return;
     }
 
-    if (!form.fecha_compra) {
-      toast.error("La fecha de compra es obligatoria");
-      return false;
-    }
+    setSelectedAnimals((prev) => [...prev, ...newAnimals]);
 
-    const weight = Number(form.peso_recepcion);
-    const unitPrice = Number(form.precio_unitario);
-    const totalPrice = Number(form.precio_total);
-    const freight = Number(form.costo_flete || 0);
+    setPurchaseData((prev) => {
+      const updated = {
+        ...prev,
+      };
 
-    if (!Number.isFinite(weight) || weight <= 0) {
-      toast.error("El peso de recepción debe ser mayor que cero");
-      return false;
-    }
+      newAnimals.forEach((animal) => {
+        updated[animal.id] = {
+          peso_recepcion: animal.peso_actual ?? "",
+          precio_total: "",
+        };
+      });
 
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-      toast.error("El precio por kg debe ser mayor que cero");
-      return false;
-    }
-
-    if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
-      toast.error("El precio total del animal debe ser mayor que cero");
-      return false;
-    }
-
-    if (!Number.isFinite(freight) || freight < 0) {
-      toast.error("El costo de flete no puede ser negativo");
-      return false;
-    }
-
-    return true;
+      return updated;
+    });
   };
+
+  const clearSelection = () => {
+    setSelectedAnimals([]);
+    setPurchaseData({});
+  };
+
+  // ==========================================================
+  // DETALLE
+  // ==========================================================
+
+  const updatePurchaseData = (animalId, field, value) => {
+    setPurchaseData((prev) => ({
+      ...prev,
+      [animalId]: {
+        ...prev[animalId],
+        [field]: value,
+      },
+    }));
+  };
+
+  // ==========================================================
+  // CÁLCULOS
+  // ==========================================================
+
+  const fleteTotal = Number(form.flete_total) || 0;
+
+  const subtotalAnimales = selectedAnimals.reduce((total, animal) => {
+    const data = purchaseData[animal.id];
+
+    return total + (Number(data?.precio_total) || 0);
+  }, 0);
+
+  const fletePorAnimal =
+    selectedAnimals.length > 0 ? fleteTotal / selectedAnimals.length : 0;
+
+  const inversionTotal = subtotalAnimales + fleteTotal;
+
+  const getAnimalData = (animal, index) => {
+    const data = purchaseData[animal.id] || {};
+
+    const peso = Number(data.peso_recepcion) || 0;
+
+    const precio = Number(data.precio_total) || 0;
+
+    let flete = fletePorAnimal;
+
+    if (index === selectedAnimals.length - 1 && selectedAnimals.length > 0) {
+      const previousFlete = fletePorAnimal * (selectedAnimals.length - 1);
+
+      flete = fleteTotal - previousFlete;
+    }
+
+    const costoAdquisicion = precio + flete;
+
+    const costoKg = peso > 0 ? costoAdquisicion / peso : 0;
+
+    return {
+      peso,
+      precio,
+      flete,
+      costoAdquisicion,
+      costoKg,
+    };
+  };
+
+  // ==========================================================
+  // GUARDAR
+  // ==========================================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    if (selectedAnimals.length === 0) {
+      toast.error("Selecciona al menos un animal");
+
       return;
+    }
+
+    if (Number(form.flete_total) < 0) {
+      toast.error("El flete no puede ser negativo");
+
+      return;
+    }
+
+    for (const animal of selectedAnimals) {
+      const data = purchaseData[animal.id];
+
+      if (!data || Number(data.peso_recepcion) <= 0) {
+        toast.error(
+          `El peso de recepción de ${animal.arete} debe ser mayor que 0`,
+        );
+
+        return;
+      }
+
+      if (!data || Number(data.precio_total) <= 0) {
+        toast.error(
+          `El precio de compra de ${animal.arete} debe ser mayor que 0`,
+        );
+
+        return;
+      }
     }
 
     try {
       setSaving(true);
 
       const payload = {
-        id_animal: form.id_animal,
         fecha_compra: form.fecha_compra,
+
         proveedor: form.proveedor.trim() || null,
-        peso_recepcion: Number(form.peso_recepcion),
-        precio_unitario: Number(form.precio_unitario),
-        precio_total: Number(form.precio_total),
-        costo_flete: Number(form.costo_flete || 0),
+
+        flete_total: Number(form.flete_total) || 0,
+
+        notas: form.notas.trim() || null,
+
+        animales: selectedAnimals.map((animal) => {
+          const data = purchaseData[animal.id];
+
+          const peso = Number(data.peso_recepcion);
+
+          const precio = Number(data.precio_total);
+
+          return {
+            id_animal: animal.id,
+
+            peso_recepcion: peso,
+
+            precio_unitario: precio / peso,
+
+            precio_total: precio,
+          };
+        }),
       };
 
-      if (editingId) {
-        await purchaseService.update(editingId, payload);
-        toast.success("Compra actualizada correctamente");
-      } else {
-        await purchaseService.create(payload);
-        toast.success("Compra registrada correctamente");
-      }
+      await purchaseService.createBatch(payload);
 
-      resetForm();
+      toast.success(`Compra registrada: ${selectedAnimals.length} animales`);
 
-      await Promise.all([fetchPurchases(), fetchAnimals()]);
+      clearSelection();
+
+      setForm({
+        ...INITIAL_FORM,
+        fecha_compra: new Date().toISOString().split("T")[0],
+      });
+
+      await loadData();
     } catch (err) {
-      console.error("Error guardando compra:", err);
+      console.error("Error registrando compra:", err);
 
-      toast.error(err?.response?.data?.error || "Error al guardar la compra");
+      toast.error(err?.response?.data?.error || "Error registrando la compra");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEdit = (purchase) => {
-    setEditingId(purchase.id);
+  // ==========================================================
+  // VER DETALLE
+  // ==========================================================
 
-    setForm({
-      id_animal: purchase.id_animal || "",
-      fecha_compra: purchase.fecha_compra || getToday(),
-      proveedor: purchase.proveedor || "",
-      peso_recepcion: purchase.peso_recepcion ?? "",
-      precio_unitario: purchase.precio_unitario ?? "",
-      precio_total: purchase.precio_total ?? "",
-      costo_flete: purchase.costo_flete ?? "",
-    });
-
-    const animal = animals.find((item) => item.id === purchase.id_animal);
-
-    if (animal) {
-      setAnimalSearch(`${animal.arete || ""} ${animal.nombre || ""}`.trim());
-    }
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
-
-  const handleDelete = async (purchase) => {
-    const animalName =
-      purchase.animals?.arete || purchase.animals?.nombre || purchase.id_animal;
-
-    const confirmed = window.confirm(
-      `¿Eliminar la compra del animal ${animalName}?\n\n` +
-        "Esta acción elimina el registro financiero de la compra.",
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+  const handleViewBatch = async (id) => {
     try {
-      await purchaseService.delete(purchase.id);
+      setLoadingBatch(true);
 
-      toast.success("Compra eliminada");
+      const data = await purchaseService.getBatchById(id);
 
-      if (editingId === purchase.id) {
-        resetForm();
-      }
-
-      await Promise.all([fetchPurchases(), fetchAnimals()]);
+      setSelectedBatch(data);
     } catch (err) {
-      console.error("Error eliminando compra:", err);
+      console.error(err);
 
-      toast.error(err?.response?.data?.error || "Error eliminando la compra");
+      toast.error(
+        err?.response?.data?.error || "Error cargando detalle de compra",
+      );
+    } finally {
+      setLoadingBatch(false);
     }
   };
 
-  const totalInvested = useMemo(() => {
-    return purchases.reduce((sum, purchase) => {
-      const price = Number(purchase.precio_total || 0);
-      const freight = Number(purchase.costo_flete || 0);
+  // ==========================================================
+  // RENDER
+  // ==========================================================
 
-      return sum + price + freight;
-    }, 0);
-  }, [purchases]);
-
-  const totalAnimalsPurchased = purchases.length;
-
-  const averageInvestment = totalAnimalsPurchased
-    ? totalInvested / totalAnimalsPurchased
-    : 0;
+  if (loading) {
+    return (
+      <div className="p-6">
+        <p>Cargando compras...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* ENCABEZADO */}
+      {/* ====================================================
+          ENCABEZADO
+      ==================================================== */}
+
       <div>
-        <h1 className="text-3xl font-bold text-gray-800">Compras de Ganado</h1>
+        <h1 className="text-3xl font-bold text-blue-900">Compras de Ganado</h1>
 
         <p className="text-gray-600 mt-1">
-          Registra las inversiones realizadas para adquirir animales y consulta
-          su historial.
+          Registra una compra completa y distribuye automáticamente el costo del
+          flete entre los animales.
         </p>
       </div>
 
-      {/* RESUMEN */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg shadow p-5">
-          <p className="text-sm text-gray-500">Animales comprados</p>
+      {/* ====================================================
+          DATOS GENERALES
+      ==================================================== */}
 
-          <p className="text-3xl font-bold text-blue-600 mt-1">
-            {totalAnimalsPurchased}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-5">
-          <p className="text-sm text-gray-500">Inversión acumulada</p>
-
-          <p className="text-3xl font-bold text-orange-600 mt-1">
-            {formatMoney(totalInvested)}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-5">
-          <p className="text-sm text-gray-500">Inversión promedio / animal</p>
-
-          <p className="text-3xl font-bold text-purple-600 mt-1">
-            {formatMoney(averageInvestment)}
-          </p>
-        </div>
-      </div>
-
-      {/* FORMULARIO */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold mb-4">Datos de la compra</h2>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <h2 className="text-xl font-bold">
-              {editingId ? "Editar compra" : "Registrar nueva compra"}
-            </h2>
-
-            <p className="text-sm text-gray-500 mt-1">
-              La compra se registra como inversión en ganado, separada de los
-              gastos operativos.
-            </p>
-          </div>
-
-          {editingId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-            >
-              Cancelar edición
-            </button>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-5">
-          {/* ANIMAL */}
-          <div className="md:col-span-2 relative">
-            <label className="block text-sm font-bold mb-2">Animal</label>
-
-            {selectedAnimal ? (
-              <div className="border rounded-lg p-4 bg-gray-50 flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-lg">
-                    {selectedAnimal.arete || "Sin arete"}
-                  </p>
-
-                  <p className="text-sm text-gray-600">
-                    {selectedAnimal.nombre || "Sin nombre"}
-                  </p>
-
-                  <p className="text-xs text-gray-500 mt-1">
-                    ID: {selectedAnimal.id}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={clearSelectedAnimal}
-                  disabled={!!editingId}
-                  className="text-red-600 hover:text-red-800 font-bold disabled:text-gray-400"
-                >
-                  Cambiar
-                </button>
-              </div>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={animalSearch}
-                  onChange={(e) => {
-                    setAnimalSearch(e.target.value);
-                    setShowAnimalResults(true);
-                  }}
-                  onFocus={() => setShowAnimalResults(true)}
-                  placeholder="Buscar por arete, nombre o ID..."
-                  className="w-full border rounded-lg p-3"
-                  disabled={loadingAnimals}
-                />
-
-                {showAnimalResults && (
-                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-72 overflow-y-auto">
-                    {loadingAnimals ? (
-                      <p className="p-4 text-gray-500">Cargando animales...</p>
-                    ) : filteredAnimals.length === 0 ? (
-                      <p className="p-4 text-gray-500">
-                        No hay animales disponibles para registrar una compra.
-                      </p>
-                    ) : (
-                      filteredAnimals.map((animal) => (
-                        <button
-                          key={animal.id}
-                          type="button"
-                          onClick={() => handleAnimalSelect(animal)}
-                          className="w-full text-left px-4 py-3 hover:bg-gray-100 border-b last:border-b-0"
-                        >
-                          <p className="font-bold">
-                            {animal.arete || "Sin arete"}{" "}
-                            {animal.nombre ? `- ${animal.nombre}` : ""}
-                          </p>
-
-                          <p className="text-sm text-gray-600">
-                            {animal.sexo || "-"} · {animal.categoria || "-"}
-                          </p>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* FECHA */}
-          <div>
-            <label className="block text-sm font-bold mb-2">
-              Fecha de compra
-            </label>
+            <label className="block text-sm font-bold mb-1">Fecha *</label>
 
             <input
               type="date"
               name="fecha_compra"
               value={form.fecha_compra}
-              onChange={handleChange}
+              onChange={handleFormChange}
               required
-              className="w-full border rounded-lg p-3"
+              disabled={saving}
+              className="w-full border rounded p-2"
             />
           </div>
 
-          {/* PROVEEDOR */}
           <div>
-            <label className="block text-sm font-bold mb-2">Proveedor</label>
+            <label className="block text-sm font-bold mb-1">Proveedor</label>
 
             <input
               type="text"
               name="proveedor"
               value={form.proveedor}
-              onChange={handleChange}
+              onChange={handleFormChange}
               placeholder="Nombre del proveedor"
-              className="w-full border rounded-lg p-3"
+              disabled={saving}
+              className="w-full border rounded p-2"
             />
           </div>
 
-          {/* PESO */}
           <div>
-            <label className="block text-sm font-bold mb-2">
-              Peso de recepción (kg)
+            <label className="block text-sm font-bold mb-1">
+              Flete total ($)
             </label>
 
             <input
               type="number"
-              name="peso_recepcion"
-              value={form.peso_recepcion}
-              onChange={handleChange}
-              min="0.01"
-              step="0.01"
-              required
-              placeholder="Ej: 320"
-              className="w-full border rounded-lg p-3"
-            />
-
-            <p className="text-xs text-gray-500 mt-1">
-              Debe ser el peso real registrado al momento de recibir el animal.
-            </p>
-          </div>
-
-          {/* PRECIO UNITARIO */}
-          <div>
-            <label className="block text-sm font-bold mb-2">
-              Precio por kg
-            </label>
-
-            <input
-              type="number"
-              name="precio_unitario"
-              value={form.precio_unitario}
-              onChange={handleChange}
-              min="0.01"
-              step="0.01"
-              required
-              placeholder="Ej: 4.50"
-              className="w-full border rounded-lg p-3"
-            />
-          </div>
-
-          {/* PRECIO TOTAL */}
-          <div>
-            <label className="block text-sm font-bold mb-2">
-              Precio del animal
-            </label>
-
-            <input
-              type="number"
-              name="precio_total"
-              value={form.precio_total}
-              onChange={handleChange}
-              min="0.01"
-              step="0.01"
-              required
-              placeholder="Ej: 1440"
-              className="w-full border rounded-lg p-3"
-            />
-
-            <p className="text-xs text-gray-500 mt-1">
-              Valor pagado por el animal, antes del flete.
-            </p>
-          </div>
-
-          {/* FLETE */}
-          <div>
-            <label className="block text-sm font-bold mb-2">
-              Costo de flete
-            </label>
-
-            <input
-              type="number"
-              name="costo_flete"
-              value={form.costo_flete}
-              onChange={handleChange}
+              name="flete_total"
+              value={form.flete_total}
+              onChange={handleFormChange}
               min="0"
               step="0.01"
-              placeholder="Ej: 75"
-              className="w-full border rounded-lg p-3"
+              placeholder="200"
+              disabled={saving}
+              className="w-full border rounded p-2"
             />
-
-            <p className="text-xs text-gray-500 mt-1">
-              Puede dejarse en 0 si no hubo costo de transporte.
-            </p>
           </div>
 
-          {/* RESUMEN */}
-          <div className="md:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-5">
-            <h3 className="font-bold text-blue-900 mb-4">
-              Resumen de la inversión
-            </h3>
-
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Precio animal</p>
-
-                <p className="text-xl font-bold">
-                  {formatMoney(form.precio_total)}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-600">Flete</p>
-
-                <p className="text-xl font-bold">
-                  {formatMoney(form.costo_flete)}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-600">Inversión total</p>
-
-                <p className="text-2xl font-bold text-blue-700">
-                  {formatMoney(investmentTotal)}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-blue-200">
-              <p className="text-sm text-gray-600">
-                Costo efectivo por kg incluyendo flete
-              </p>
-
-              <p className="text-xl font-bold text-blue-700">
-                {formatMoney(costPerKg)} / kg
-              </p>
-            </div>
-          </div>
-
-          {/* BOTONES */}
-          <div className="md:col-span-2 flex gap-3">
-            <button
-              type="submit"
-              disabled={saving || loadingAnimals}
-              className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              {saving
-                ? "Guardando..."
-                : editingId
-                  ? "Actualizar compra"
-                  : "Registrar compra"}
-            </button>
-
-            {editingId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-6 bg-gray-200 rounded-lg font-bold hover:bg-gray-300"
-              >
-                Cancelar
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
-
-      {/* HISTORIAL */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-5">
           <div>
-            <h2 className="text-xl font-bold">Historial de compras</h2>
+            <label className="block text-sm font-bold mb-1">
+              Animales seleccionados
+            </label>
 
-            <p className="text-sm text-gray-500">
-              Todas las inversiones registradas en ganado.
-            </p>
+            <div className="border rounded p-2 bg-gray-50 font-bold">
+              {selectedAnimals.length}
+            </div>
           </div>
         </div>
 
-        {loadingPurchases ? (
-          <p className="text-gray-500">Cargando historial...</p>
-        ) : purchases.length === 0 ? (
-          <div className="text-center py-10 text-gray-500">
-            <p className="text-lg font-semibold">No hay compras registradas.</p>
+        <div className="mt-4">
+          <label className="block text-sm font-bold mb-1">Notas</label>
 
-            <p className="text-sm mt-1">
-              Las compras que registres aparecerán aquí.
+          <textarea
+            name="notas"
+            value={form.notas}
+            onChange={handleFormChange}
+            rows="2"
+            placeholder="Observaciones de la compra..."
+            disabled={saving}
+            className="w-full border rounded p-2"
+          />
+        </div>
+      </div>
+
+      {/* ====================================================
+          SELECCIONAR ANIMALES
+      ==================================================== */}
+
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex flex-col md:flex-row md:justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-xl font-bold">Animales de la compra</h2>
+
+            <p className="text-sm text-gray-500">
+              Selecciona los animales que forman parte de esta compra.
             </p>
           </div>
-        ) : (
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={selectAllFiltered}
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+            >
+              Seleccionar filtrados
+            </button>
+
+            <button
+              type="button"
+              onClick={clearSelection}
+              disabled={saving || selectedAnimals.length === 0}
+              className="px-4 py-2 border rounded hover:bg-gray-100 disabled:bg-gray-100"
+            >
+              Limpiar
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-bold mb-1">Buscar animal</label>
+
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por arete o nombre..."
+            className="w-full border rounded p-2"
+          />
+        </div>
+
+        <p className="text-sm text-gray-500 mb-3">
+          Mostrando {filteredAnimals.length} animales disponibles
+        </p>
+
+        <div className="overflow-x-auto border rounded">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-3 text-left">Seleccionar</th>
+                <th className="p-3 text-left">Arete</th>
+                <th className="p-3 text-left">Nombre</th>
+                <th className="p-3 text-left">Sexo</th>
+                <th className="p-3 text-left">Categoría</th>
+                <th className="p-3 text-left">Peso actual</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredAnimals.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="p-6 text-center text-gray-500">
+                    No hay animales disponibles para registrar una compra.
+                  </td>
+                </tr>
+              ) : (
+                filteredAnimals.map((animal) => {
+                  const selected = selectedAnimals.some(
+                    (item) => item.id === animal.id,
+                  );
+
+                  return (
+                    <tr
+                      key={animal.id}
+                      className={`border-t ${
+                        selected ? "bg-blue-50" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={saving}
+                          onChange={() => toggleAnimal(animal)}
+                          className="w-5 h-5"
+                        />
+                      </td>
+
+                      <td className="p-3 font-bold">{animal.arete}</td>
+
+                      <td className="p-3">{animal.nombre || "-"}</td>
+
+                      <td className="p-3">{animal.sexo || "-"}</td>
+
+                      <td className="p-3">{animal.categoria || "-"}</td>
+
+                      <td className="p-3">
+                        {animal.peso_actual != null
+                          ? `${animal.peso_actual} kg`
+                          : "-"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ====================================================
+          DETALLE DE COMPRA
+      ==================================================== */}
+
+      {selectedAnimals.length > 0 && (
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white rounded-lg shadow p-6"
+        >
+          <div className="flex flex-col md:flex-row md:justify-between gap-3 mb-5">
+            <div>
+              <h2 className="text-xl font-bold">Detalle de la compra</h2>
+
+              <p className="text-sm text-gray-500">
+                El flete se distribuye automáticamente entre los animales.
+              </p>
+            </div>
+
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Inversión total</p>
+
+              <p className="text-2xl font-bold text-blue-900">
+                ${money(inversionTotal)}
+              </p>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="p-3 text-left">Fecha</th>
+                  <th className="p-3 text-left">Arete</th>
 
-                  <th className="p-3 text-left">Animal</th>
+                  <th className="p-3 text-right">Peso recepción</th>
 
-                  <th className="p-3 text-left">Proveedor</th>
+                  <th className="p-3 text-right">Precio animal</th>
 
-                  <th className="p-3 text-right">Peso</th>
+                  <th className="p-3 text-right">Flete asignado</th>
 
-                  <th className="p-3 text-right">Precio/kg</th>
+                  <th className="p-3 text-right">Costo adquisición</th>
 
-                  <th className="p-3 text-right">Animal</th>
-
-                  <th className="p-3 text-right">Flete</th>
-
-                  <th className="p-3 text-right">Inversión</th>
-
-                  <th className="p-3 text-center">Acciones</th>
+                  <th className="p-3 text-right">Costo/kg</th>
                 </tr>
               </thead>
 
               <tbody>
-                {purchases.map((purchase) => {
-                  const animal = purchase.animals || {};
+                {selectedAnimals.map((animal, index) => {
+                  const data = purchaseData[animal.id] || {};
 
-                  const investment =
-                    Number(purchase.precio_total || 0) +
-                    Number(purchase.costo_flete || 0);
+                  const calculated = getAnimalData(animal, index);
 
                   return (
-                    <tr key={purchase.id} className="border-t hover:bg-gray-50">
-                      <td className="p-3">{purchase.fecha_compra}</td>
-
-                      <td className="p-3">
-                        <p className="font-bold">
-                          {animal.arete || "Sin arete"}
-                        </p>
-
-                        <p className="text-xs text-gray-500">
-                          {animal.nombre || "Sin nombre"}
-                        </p>
-                      </td>
-
-                      <td className="p-3">{purchase.proveedor || "-"}</td>
-
-                      <td className="p-3 text-right">
-                        {Number(purchase.peso_recepcion || 0).toFixed(2)} kg
+                    <tr key={animal.id} className="border-t">
+                      <td className="p-3 font-bold">
+                        {animal.arete}
+                        {animal.nombre && (
+                          <span className="block text-xs text-gray-500 font-normal">
+                            {animal.nombre}
+                          </span>
+                        )}
                       </td>
 
                       <td className="p-3 text-right">
-                        {formatMoney(purchase.precio_unitario)}
+                        <input
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          value={data.peso_recepcion ?? ""}
+                          onChange={(e) =>
+                            updatePurchaseData(
+                              animal.id,
+                              "peso_recepcion",
+                              e.target.value,
+                            )
+                          }
+                          required
+                          disabled={saving}
+                          className="w-32 border rounded p-2"
+                        />
                       </td>
 
                       <td className="p-3 text-right">
-                        {formatMoney(purchase.precio_total)}
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={data.precio_total ?? ""}
+                          onChange={(e) =>
+                            updatePurchaseData(
+                              animal.id,
+                              "precio_total",
+                              e.target.value,
+                            )
+                          }
+                          required
+                          disabled={saving}
+                          className="w-32 border rounded p-2"
+                        />
                       </td>
 
                       <td className="p-3 text-right">
-                        {formatMoney(purchase.costo_flete)}
+                        ${money(calculated.flete)}
                       </td>
 
-                      <td className="p-3 text-right font-bold text-orange-600">
-                        {formatMoney(investment)}
+                      <td className="p-3 text-right font-bold">
+                        ${money(calculated.costoAdquisicion)}
                       </td>
 
-                      <td className="p-3">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(purchase)}
-                            className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                          >
-                            Editar
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(purchase)}
-                            className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                          >
-                            Eliminar
-                          </button>
-                        </div>
+                      <td className="p-3 text-right">
+                        ${number(calculated.costoKg)}
                       </td>
                     </tr>
                   );
@@ -787,8 +697,257 @@ export default function PurchasesPage() {
               </tbody>
             </table>
           </div>
+
+          {/* RESUMEN */}
+
+          <div className="grid md:grid-cols-3 gap-4 mt-6">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-500">Subtotal animales</p>
+
+              <p className="text-xl font-bold">${money(subtotalAnimales)}</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-500">Flete total</p>
+
+              <p className="text-xl font-bold">${money(fleteTotal)}</p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-700">Inversión total</p>
+
+              <p className="text-xl font-bold text-blue-900">
+                ${money(inversionTotal)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end mt-6">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-8 py-3 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 disabled:bg-gray-400"
+            >
+              {saving
+                ? "Registrando compra..."
+                : `Registrar compra de ${selectedAnimals.length} animal${
+                    selectedAnimals.length === 1 ? "" : "es"
+                  }`}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* ====================================================
+          HISTORIAL
+      ==================================================== */}
+
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex justify-between items-center mb-5">
+          <div>
+            <h2 className="text-xl font-bold">Historial de compras</h2>
+
+            <p className="text-sm text-gray-500">
+              Consulta las inversiones realizadas en ganado.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={loadData}
+            className="px-4 py-2 border rounded hover:bg-gray-100"
+          >
+            ↻ Actualizar
+          </button>
+        </div>
+
+        {batches.length === 0 ? (
+          <div className="border border-dashed rounded-lg p-8 text-center">
+            <p className="text-gray-500">
+              Todavía no hay compras por lote registradas.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {batches.map((batch) => (
+              <div
+                key={batch.id}
+                className="border rounded-lg p-4 hover:bg-gray-50"
+              >
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <p className="font-bold text-lg">
+                      Compra del {batch.fecha_compra}
+                    </p>
+
+                    <p className="text-sm text-gray-600">
+                      Proveedor: {batch.proveedor || "No especificado"}
+                    </p>
+
+                    <p className="text-sm text-gray-600">
+                      Animales: {batch.purchases?.length}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">Inversión</p>
+
+                    <p className="text-xl font-bold text-blue-900">
+                      ${money(batch.inversion_total)}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleViewBatch(batch.id)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Ver detalle
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
+
+      {/* ====================================================
+          MODAL DETALLE
+      ==================================================== */}
+
+      {selectedBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-blue-900">
+                  Detalle de compra
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedBatch.fecha_compra}
+                  {" · "}
+                  {selectedBatch.proveedor || "Proveedor no especificado"}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedBatch(null)}
+                className="text-gray-500 hover:text-gray-800 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {loadingBatch ? (
+              <div className="p-8 text-center">Cargando detalle...</div>
+            ) : (
+              <div className="p-6">
+                <div className="grid md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-500">Subtotal animales</p>
+
+                    <p className="text-xl font-bold">
+                      ${money(selectedBatch.subtotal_animales)}
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-500">Flete</p>
+
+                    <p className="text-xl font-bold">
+                      ${money(selectedBatch.flete_total)}
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-sm text-blue-700">Inversión total</p>
+
+                    <p className="text-xl font-bold text-blue-900">
+                      ${money(selectedBatch.inversion_total)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="p-3 text-left">Animal</th>
+
+                        <th className="p-3 text-right">Peso</th>
+
+                        <th className="p-3 text-right">Precio</th>
+
+                        <th className="p-3 text-right">Flete</th>
+
+                        <th className="p-3 text-right">Costo adquisición</th>
+
+                        <th className="p-3 text-right">Costo/kg</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {(selectedBatch.purchases || []).map((purchase) => (
+                        <tr key={purchase.id} className="border-t">
+                          <td className="p-3">
+                            <p className="font-bold">
+                              {purchase.animals?.arete}
+                            </p>
+
+                            <p className="text-xs text-gray-500">
+                              {purchase.animals?.nombre || "Sin nombre"}
+                            </p>
+                          </td>
+
+                          <td className="p-3 text-right">
+                            {purchase.peso_recepcion} kg
+                          </td>
+
+                          <td className="p-3 text-right">
+                            ${money(purchase.precio_total)}
+                          </td>
+
+                          <td className="p-3 text-right">
+                            $
+                            {money(
+                              purchase.flete_asignado ?? purchase.costo_flete,
+                            )}
+                          </td>
+
+                          <td className="p-3 text-right font-bold">
+                            $
+                            {money(
+                              purchase.costo_adquisicion ??
+                                Number(purchase.precio_total) +
+                                  Number(purchase.flete_asignado || 0),
+                            )}
+                          </td>
+
+                          <td className="p-3 text-right">
+                            ${money(purchase.costo_kg_comprado)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {selectedBatch.notas && (
+                  <div className="mt-5 bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm font-bold">Notas</p>
+
+                    <p className="text-sm text-gray-600 mt-1">
+                      {selectedBatch.notas}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

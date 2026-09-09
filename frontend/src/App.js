@@ -22,15 +22,15 @@ function App() {
 
           <Route path="/animals" element={<AnimalsPage />} />
 
+          <Route path="/purchases" element={<PurchasesPage />} />
+
           <Route path="/sales" element={<SalesPage />} />
 
           <Route path="/weights" element={<WeightsPage />} />
 
-          <Route path="/purchases" element={<PurchasesPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
 
           <Route path="/expenses" element={<ExpensesPage />} />
-
-          <Route path="/reports" element={<ReportsPage />} />
         </Routes>
       </div>
     </BrowserRouter>
