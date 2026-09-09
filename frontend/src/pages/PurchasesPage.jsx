@@ -29,6 +29,7 @@ export default function PurchasesPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const [search, setSearch] = useState("");
   const [selectedAnimals, setSelectedAnimals] = useState([]);
@@ -114,6 +115,7 @@ export default function PurchasesPage() {
       ...prev,
       [name]: value,
     }));
+    setSubmitError("");
   };
 
   // ==========================================================
@@ -121,6 +123,8 @@ export default function PurchasesPage() {
   // ==========================================================
 
   const toggleAnimal = (animal) => {
+    setSubmitError("");
+
     const exists = selectedAnimals.some((item) => item.id === animal.id);
 
     if (exists) {
@@ -183,6 +187,7 @@ export default function PurchasesPage() {
   const clearSelection = () => {
     setSelectedAnimals([]);
     setPurchaseData({});
+    setSubmitError("");
   };
 
   // ==========================================================
@@ -250,6 +255,7 @@ export default function PurchasesPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError("");
 
     if (selectedAnimals.length === 0) {
       toast.error("Selecciona al menos un animal");
@@ -329,7 +335,20 @@ export default function PurchasesPage() {
     } catch (err) {
       console.error("Error registrando compra:", err);
 
-      toast.error(err?.response?.data?.error || "Error registrando la compra");
+      const responseData = err?.response?.data;
+      const backendMessage =
+        typeof responseData === "string"
+          ? responseData
+          : responseData?.error || responseData?.message;
+
+      const message =
+        backendMessage ||
+        (err?.response?.status === 400
+          ? "No se pudo registrar la compra. Verifica que ninguno de los animales seleccionados ya esté asociado a otra compra."
+          : "Error registrando la compra. Inténtalo nuevamente.");
+
+      setSubmitError(message);
+      toast.error(message, { duration: 6000 });
     } finally {
       setSaving(false);
     }
@@ -583,6 +602,35 @@ export default function PurchasesPage() {
       {/* ====================================================
           DETALLE DE COMPRA
       ==================================================== */}
+
+      {submitError && (
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-200 border-l-4 border-l-red-600 rounded-lg p-4"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-bold text-red-800">
+                ⚠️ No se pudo registrar la compra
+              </p>
+              <p className="text-sm text-red-700 mt-1">{submitError}</p>
+              <p className="text-xs text-red-600 mt-2">
+                La información que introdujiste se conserva para que puedas
+                corregir la selección o los datos e intentarlo nuevamente.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSubmitError("")}
+              className="text-red-500 hover:text-red-800 text-xl leading-none"
+              aria-label="Cerrar mensaje de error"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {selectedAnimals.length > 0 && (
         <form
