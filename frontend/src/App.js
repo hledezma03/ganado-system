@@ -10,6 +10,7 @@ import ExpensesPage from "./pages/ExpensesPage";
 import SalesPage from "./pages/SalesPage";
 import WeightsPage from "./pages/WeightsPage";
 import PurchasesPage from "./pages/PurchasesPage";
+import ReproductionPage from "./pages/ReproductionPage";
 
 function App() {
   return (
@@ -27,6 +28,8 @@ function App() {
           <Route path="/sales" element={<SalesPage />} />
 
           <Route path="/weights" element={<WeightsPage />} />
+
+          <Route path="/reproduction" element={<ReproductionPage />} />
 
           <Route path="/reports" element={<ReportsPage />} />
 

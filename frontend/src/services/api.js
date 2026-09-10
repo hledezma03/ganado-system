@@ -121,17 +121,20 @@ export const purchaseService = {
 // ============================================================
 
 export const reproductionService = {
-  record: async (data) => {
-    const response = await api.post("/reproduction", data);
+  recordBirth: (data) =>
+    api.post("/reproduction/birth", data),
 
-    return response.data;
-  },
+  getCows: () =>
+    api.get("/reproduction/cows"),
 
-  getByAnimal: async (animalId) => {
-    const response = await api.get(`/reproduction/${animalId}`);
+  getByAnimal: (animalId) =>
+    api.get(`/reproduction/${animalId}`),
 
-    return response.data;
-  },
+  recordWeaning: (data) =>
+    api.post("/reproduction/weaning", data),
+
+  update: (id, data) =>
+    api.put(`/reproduction/${id}`, data),
 };
 
 // ============================================================
