@@ -21,16 +21,19 @@ export const animalService = {
 
   getById: async (id) => {
     const response = await api.get(`/animals/${id}`);
+
     return response.data;
   },
 
   create: async (animal) => {
     const response = await api.post("/animals", animal);
+
     return response.data;
   },
 
   update: async (id, animal) => {
     const response = await api.put(`/animals/${id}`, animal);
+
     return response.data;
   },
 
@@ -60,6 +63,7 @@ export const animalService = {
 export const weightService = {
   record: async (data) => {
     const response = await api.post("/weights", data);
+
     return response.data;
   },
 
@@ -77,6 +81,13 @@ export const weightService = {
 export const purchaseService = {
   create: async (data) => {
     const response = await api.post("/purchases", data);
+
+    return response.data;
+  },
+
+  getAll: async () => {
+    const response = await api.get("/purchases");
+
     return response.data;
   },
 
@@ -86,18 +97,8 @@ export const purchaseService = {
     return response.data;
   },
 
-  getAll: async (params = {}) => {
-    const response = await api.get("/purchases", {
-      params,
-    });
-
-    return response.data;
-  },
-
-  getBatches: async (params = {}) => {
-    const response = await api.get("/purchases/batches", {
-      params,
-    });
+  getBatches: async () => {
+    const response = await api.get("/purchases/batches");
 
     return response.data;
   },
@@ -109,26 +110,14 @@ export const purchaseService = {
   },
 
   getByAnimal: async (animalId) => {
-    const response = await api.get(`/purchases/animal/${animalId}`);
-
-    return response.data;
-  },
-
-  update: async (id, data) => {
-    const response = await api.put(`/purchases/${id}`, data);
-
-    return response.data;
-  },
-
-  delete: async (id) => {
-    const response = await api.delete(`/purchases/${id}`);
+    const response = await api.get(`/purchases/${animalId}`);
 
     return response.data;
   },
 };
 
 // ============================================================
-// REPRODUCCIÓN
+// REPRODUCCION
 // ============================================================
 
 export const reproductionService = {
@@ -156,14 +145,14 @@ export const expenseService = {
     return response.data;
   },
 
-  getAll: async (params = {}) => {
-    const response = await api.get("/expenses", { params });
+  getAll: async () => {
+    const response = await api.get("/expenses");
 
     return response.data;
   },
 
-  getSummary: async (params = {}) => {
-    const response = await api.get("/expenses/summary", { params });
+  getSummary: async () => {
+    const response = await api.get("/expenses/summary");
 
     return response.data;
   },
@@ -174,6 +163,22 @@ export const expenseService = {
 // ============================================================
 
 export const reportService = {
+  getFinancialReport: async (year, month) => {
+    const params = {};
+
+    if (year) {
+      params.year = year;
+    }
+
+    if (month) {
+      params.month = month;
+    }
+
+    const response = await api.get("/reports/financial", { params });
+
+    return response.data;
+  },
+
   getReproductiveReport: async () => {
     const response = await api.get("/reports/reproductive");
 
@@ -186,7 +191,17 @@ export const reportService = {
     return response.data;
   },
 
-  getFinancialSummary: async (params = {}) => {
+  getFinancialSummary: async (startDate, endDate) => {
+    const params = {};
+
+    if (startDate) {
+      params.startDate = startDate;
+    }
+
+    if (endDate) {
+      params.endDate = endDate;
+    }
+
     const response = await api.get("/reports/financial-summary", { params });
 
     return response.data;
