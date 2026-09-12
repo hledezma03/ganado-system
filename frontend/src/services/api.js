@@ -41,9 +41,11 @@ export const animalService = {
   },
 
   registerDischarge: async (id, data) => {
-    const estado = data?.motivo;
-
-    const response = await api.patch(`/animals/${id}/status`, { estado });
+    const response = await api.patch(`/animals/${id}/status`, {
+      estado: data?.motivo,
+      fecha_baja: data?.fecha_baja,
+      notas: data?.notas || null,
+    });
 
     return response.data;
   },

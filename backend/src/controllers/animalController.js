@@ -450,15 +450,65 @@ exports.updateAnimal = async (req, res) => {
 exports.updateAnimalStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { estado } = req.body;
+    const { estado, fecha_baja, notas } = req.body;
 
-    const estadosPermitidos = ["Activo", "Vendido", "Muerto", "Desaparecido"];
+    const estadosValidos = ["Activo", "Vendido", "Muerto", "Desaparecido"];
 
-    if (!estadosPermitidos.includes(estado)) {
+    if (!estadosValidos.includes(estado)) {
       return res.status(400).json({
-        error: "Estado de animal no válido",
+        error: "Estado no válido",
       });
     }
+
+    // ==========================================================
+    // BAJA DEL ANIMAL
+    // ==========================================================
+
+    if (estado === "Muerto" || estado === "Desaparecido") {
+      if (!fecha_baja) {
+        return res.status(400).json({
+          error: "La fecha de baja es obligatoria",
+        });
+      }
+
+      // Evitar registrar una segunda baja
+      const { data: existingDischarge, error: dischargeCheckError } =
+        await supabase
+          .from("animal_discharges")
+          .select("id")
+          .eq("id_animal", id)
+          .limit(1);
+
+      if (dischargeCheckError) {
+        throw dischargeCheckError;
+      }
+
+      if (existingDischarge?.length > 0) {
+        return res.status(400).json({
+          error: "Este animal ya tiene una baja registrada",
+        });
+      }
+
+      // Registrar historial de baja
+      const { error: dischargeError } = await supabase
+        .from("animal_discharges")
+        .insert([
+          {
+            id_animal: id,
+            fecha_baja,
+            motivo: estado,
+            notas: notas || null,
+          },
+        ]);
+
+      if (dischargeError) {
+        throw dischargeError;
+      }
+    }
+
+    // ==========================================================
+    // ACTUALIZAR ESTADO
+    // ==========================================================
 
     const { data, error } = await supabase
       .from("animals")
@@ -467,16 +517,19 @@ exports.updateAnimalStatus = async (req, res) => {
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .select()
-      .single();
+      .select();
 
-    if (error) {
-      throw error;
+    if (error) throw error;
+
+    if (!data?.length) {
+      return res.status(404).json({
+        error: "Animal no encontrado",
+      });
     }
 
     res.json({
       success: true,
-      data,
+      data: data[0],
     });
   } catch (err) {
     console.error("updateAnimalStatus:", err);
