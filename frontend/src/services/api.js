@@ -21,19 +21,16 @@ export const animalService = {
 
   getById: async (id) => {
     const response = await api.get(`/animals/${id}`);
-
     return response.data;
   },
 
   create: async (animal) => {
     const response = await api.post("/animals", animal);
-
     return response.data;
   },
 
   update: async (id, animal) => {
     const response = await api.put(`/animals/${id}`, animal);
-
     return response.data;
   },
 
@@ -43,15 +40,21 @@ export const animalService = {
     return response.data;
   },
 
+  registerDischarge: async (id, data) => {
+    const estado = data?.motivo;
+
+    const response = await api.patch(`/animals/${id}/status`, { estado });
+
+    return response.data;
+  },
+
   syncCategories: async () => {
     const response = await api.post("/animals/sync-categories");
-
     return response.data;
   },
 
   deletePermanent: async (id) => {
     const response = await api.delete(`/animals/${id}/permanent`);
-
     return response.data;
   },
 };
@@ -121,20 +124,15 @@ export const purchaseService = {
 // ============================================================
 
 export const reproductionService = {
-  recordBirth: (data) =>
-    api.post("/reproduction/birth", data),
+  recordBirth: (data) => api.post("/reproduction/birth", data),
 
-  getCows: () =>
-    api.get("/reproduction/cows"),
+  getCows: () => api.get("/reproduction/cows"),
 
-  getByAnimal: (animalId) =>
-    api.get(`/reproduction/${animalId}`),
+  getByAnimal: (animalId) => api.get(`/reproduction/${animalId}`),
 
-  recordWeaning: (data) =>
-    api.post("/reproduction/weaning", data),
+  recordWeaning: (data) => api.post("/reproduction/weaning", data),
 
-  update: (id, data) =>
-    api.put(`/reproduction/${id}`, data),
+  update: (id, data) => api.put(`/reproduction/${id}`, data),
 };
 
 // ============================================================

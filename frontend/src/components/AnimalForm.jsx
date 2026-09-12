@@ -328,9 +328,10 @@ export default function AnimalForm({ onSuccess }) {
               onChange={handleChange}
               className="w-full border border-gray-300 rounded p-2"
             >
-              <option value="">Seleccionar</option>
+              <option value="">Seleccionar...</option>
               <option value="Vacía">Vacía</option>
               <option value="Preñada">Preñada</option>
+              <option value="Lactando">Lactando</option>
             </select>
           </div>
         )}
