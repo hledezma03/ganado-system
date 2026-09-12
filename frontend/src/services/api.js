@@ -50,6 +50,11 @@ export const animalService = {
     return response.data;
   },
 
+  getDischarges: async (id) => {
+    const response = await api.get(`/animals/${id}/discharges`);
+    return response.data;
+  },
+
   syncCategories: async () => {
     const response = await api.post("/animals/sync-categories");
     return response.data;

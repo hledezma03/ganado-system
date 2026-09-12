@@ -744,3 +744,38 @@ exports.registerDischarge = async (req, res) => {
     });
   }
 };
+
+// Obtener historial de bajas de un animal
+exports.getAnimalDischarges = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from("animal_discharges")
+      .select(
+        `
+        id,
+        id_animal,
+        fecha_baja,
+        motivo,
+        notas,
+        created_at
+      `,
+      )
+      .eq("id_animal", id)
+      .order("fecha_baja", { ascending: false });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (err) {
+    console.error("getAnimalDischarges:", err);
+
+    res.status(400).json({
+      error: err.message,
+    });
+  }
+};

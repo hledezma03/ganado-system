@@ -17,6 +17,10 @@ export default function AnimalsPage() {
     notas: "",
   });
 
+  const [dischargeHistory, setDischargeHistory] = useState([]);
+  const [loadingDischarges, setLoadingDischarges] = useState(false);
+  const [dischargeHistoryAnimal, setDischargeHistoryAnimal] = useState(null);
+
   const [search, setSearch] = useState("");
   const [filterSexo, setFilterSexo] = useState("Todos");
   const [filterCategoria, setFilterCategoria] = useState("Todas");
@@ -137,6 +141,38 @@ export default function AnimalsPage() {
   };
 
   // ============================================================
+  // HISTORIAL DE BAJAS
+  // ============================================================
+
+  const handleViewDischargeHistory = async (animal) => {
+    try {
+      setLoadingDischarges(true);
+      setDischargeHistoryAnimal(animal);
+
+      const response = await animalService.getDischarges(animal.id);
+
+      setDischargeHistory(
+        Array.isArray(response) ? response : response?.data || [],
+      );
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err?.response?.data?.error || "Error cargando historial de bajas",
+      );
+
+      setDischargeHistory([]);
+    } finally {
+      setLoadingDischarges(false);
+    }
+  };
+
+  const closeDischargeHistory = () => {
+    setDischargeHistoryAnimal(null);
+    setDischargeHistory([]);
+  };
+
+  // ============================================================
   // ELIMINACIÓN PERMANENTE
   // ============================================================
 
@@ -252,7 +288,10 @@ export default function AnimalsPage() {
 
   return (
     <div className="space-y-6">
-      {/* ENCABEZADO */}
+      {/* ======================================================
+          ENCABEZADO
+      ====================================================== */}
+
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -284,7 +323,10 @@ export default function AnimalsPage() {
           </div>
         </div>
 
-        {/* FILTROS */}
+        {/* ====================================================
+            FILTROS
+        ==================================================== */}
+
         <div className="grid md:grid-cols-4 gap-3 mt-6">
           <input
             type="text"
@@ -332,7 +374,10 @@ export default function AnimalsPage() {
         </div>
       </div>
 
-      {/* TABLA */}
+      {/* ======================================================
+          TABLA
+      ====================================================== */}
+
       <div className="bg-white rounded-lg shadow p-6">
         {loading ? (
           <p className="text-gray-500">Cargando animales...</p>
@@ -390,6 +435,7 @@ export default function AnimalsPage() {
 
                     <td className="p-3">
                       <div className="flex justify-end gap-2 flex-wrap">
+                        {/* EDITAR */}
                         <button
                           type="button"
                           onClick={() => setEditingAnimal(animal)}
@@ -398,6 +444,7 @@ export default function AnimalsPage() {
                           Editar
                         </button>
 
+                        {/* RECUPERAR */}
                         {animal.estado === "Desaparecido" && (
                           <button
                             type="button"
@@ -408,6 +455,7 @@ export default function AnimalsPage() {
                           </button>
                         )}
 
+                        {/* DAR DE BAJA */}
                         {animal.estado === "Activo" && (
                           <button
                             type="button"
@@ -418,6 +466,19 @@ export default function AnimalsPage() {
                           </button>
                         )}
 
+                        {/* HISTORIAL */}
+                        {(animal.estado === "Muerto" ||
+                          animal.estado === "Desaparecido") && (
+                          <button
+                            type="button"
+                            onClick={() => handleViewDischargeHistory(animal)}
+                            className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+                          >
+                            Historial
+                          </button>
+                        )}
+
+                        {/* ELIMINACIÓN PERMANENTE */}
                         <button
                           type="button"
                           onClick={() => handlePermanentDelete(animal)}
@@ -435,10 +496,16 @@ export default function AnimalsPage() {
         )}
       </div>
 
-      {/* FORMULARIO NUEVO */}
+      {/* ======================================================
+          FORMULARIO NUEVO
+      ====================================================== */}
+
       <AnimalForm onSuccess={fetchAnimals} />
 
-      {/* MODAL EDICIÓN */}
+      {/* ======================================================
+          MODAL EDICIÓN
+      ====================================================== */}
+
       {editingAnimal && (
         <AnimalEditModal
           animal={editingAnimal}
@@ -447,7 +514,10 @@ export default function AnimalsPage() {
         />
       )}
 
-      {/* MODAL DAR DE BAJA */}
+      {/* ======================================================
+          MODAL DAR DE BAJA
+      ====================================================== */}
+
       {dischargeAnimal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
@@ -468,6 +538,7 @@ export default function AnimalsPage() {
             </div>
 
             <form onSubmit={handleDischargeSubmit} className="p-6 space-y-4">
+              {/* FECHA */}
               <div>
                 <label className="block text-sm font-bold mb-1">
                   Fecha de baja *
@@ -487,6 +558,7 @@ export default function AnimalsPage() {
                 />
               </div>
 
+              {/* MOTIVO */}
               <div>
                 <label className="block text-sm font-bold mb-1">Motivo *</label>
 
@@ -501,10 +573,12 @@ export default function AnimalsPage() {
                   className="w-full border border-gray-300 rounded-lg p-2"
                 >
                   <option value="Muerto">Muerto</option>
+
                   <option value="Desaparecido">Desaparecido</option>
                 </select>
               </div>
 
+              {/* NOTAS */}
               <div>
                 <label className="block text-sm font-bold mb-1">Notas</label>
 
@@ -522,6 +596,7 @@ export default function AnimalsPage() {
                 />
               </div>
 
+              {/* BOTONES */}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -539,6 +614,107 @@ export default function AnimalsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================
+          MODAL HISTORIAL DE BAJAS
+      ====================================================== */}
+
+      {dischargeHistoryAnimal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* CABECERA */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-2xl font-bold text-blue-900">
+                  Historial de baja
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  Animal: <strong>{dischargeHistoryAnimal.arete}</strong>
+                  {dischargeHistoryAnimal.nombre
+                    ? ` · ${dischargeHistoryAnimal.nombre}`
+                    : ""}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeDischargeHistory}
+                className="text-gray-500 hover:text-gray-800 text-2xl leading-none"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* CONTENIDO */}
+            <div className="p-6">
+              {loadingDischarges ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Cargando historial...</p>
+                </div>
+              ) : dischargeHistory.length === 0 ? (
+                <div className="border border-dashed rounded-lg p-8 text-center">
+                  <p className="text-gray-500">
+                    No hay bajas registradas para este animal.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {dischargeHistory.map((discharge) => (
+                    <div key={discharge.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start gap-4">
+                        <div>
+                          <p className="font-bold text-gray-900">
+                            {discharge.motivo}
+                          </p>
+
+                          <p className="text-sm text-gray-600 mt-1">
+                            Fecha de baja: {discharge.fecha_baja}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-bold ${
+                            discharge.motivo === "Muerto"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {discharge.motivo}
+                        </span>
+                      </div>
+
+                      {discharge.notas && (
+                        <div className="mt-3 bg-gray-50 rounded p-3">
+                          <p className="text-xs font-bold text-gray-500">
+                            Observaciones
+                          </p>
+
+                          <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">
+                            {discharge.notas}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* BOTÓN CERRAR */}
+              <div className="flex justify-end mt-6">
+                <button
+                  type="button"
+                  onClick={closeDischargeHistory}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
