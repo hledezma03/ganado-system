@@ -34,9 +34,13 @@ export const animalService = {
     return response.data;
   },
 
+  updateLifecycle: async (id, data) => {
+    const response = await api.patch(`/animals/${id}/lifecycle`, data);
+    return response.data;
+  },
+
   updateStatus: async (id, estado) => {
     const response = await api.patch(`/animals/${id}/status`, { estado });
-
     return response.data;
   },
 
@@ -52,16 +56,19 @@ export const animalService = {
 
   getDischarges: async (id) => {
     const response = await api.get(`/animals/${id}/discharges`);
+
     return response.data;
   },
 
   syncCategories: async () => {
     const response = await api.post("/animals/sync-categories");
+
     return response.data;
   },
 
   deletePermanent: async (id) => {
     const response = await api.delete(`/animals/${id}/permanent`);
+
     return response.data;
   },
 };
@@ -97,7 +104,6 @@ export const purchaseService = {
 
   getAll: async () => {
     const response = await api.get("/purchases");
-
     return response.data;
   },
 
@@ -120,26 +126,46 @@ export const purchaseService = {
   },
 
   getByAnimal: async (animalId) => {
-    const response = await api.get(`/purchases/${animalId}`);
+    const response = await api.get(`/purchases/animal/${animalId}`);
 
     return response.data;
   },
 };
 
 // ============================================================
-// REPRODUCCION
+// REPRODUCCIÓN
 // ============================================================
 
 export const reproductionService = {
-  recordBirth: (data) => api.post("/reproduction/birth", data),
+  getCows: async () => {
+    const response = await api.get("/reproduction/cows");
 
-  getCows: () => api.get("/reproduction/cows"),
+    return response.data;
+  },
 
-  getByAnimal: (animalId) => api.get(`/reproduction/${animalId}`),
+  recordBirth: async (data) => {
+    const response = await api.post("/reproduction/birth", data);
 
-  recordWeaning: (data) => api.post("/reproduction/weaning", data),
+    return response.data;
+  },
 
-  update: (id, data) => api.put(`/reproduction/${id}`, data),
+  recordWeaning: async (data) => {
+    const response = await api.post("/reproduction/weaning", data);
+
+    return response.data;
+  },
+
+  getByAnimal: async (animalId) => {
+    const response = await api.get(`/reproduction/${animalId}`);
+
+    return response.data;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/reproduction/${id}`, data);
+
+    return response.data;
+  },
 };
 
 // ============================================================
@@ -155,7 +181,6 @@ export const expenseService = {
 
   getAll: async () => {
     const response = await api.get("/expenses");
-
     return response.data;
   },
 

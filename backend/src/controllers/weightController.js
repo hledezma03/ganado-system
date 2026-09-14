@@ -1,4 +1,5 @@
 const supabase = require("../config/database");
+const { updateAnimalCategory } = require("../services/animalCategoryService");
 
 // ============================================================
 // REGISTRAR PESO
@@ -7,19 +8,6 @@ const supabase = require("../config/database");
 exports.recordWeight = async (req, res) => {
   try {
     const { id_animal, fecha_pesaje, peso_kg } = req.body;
-
-    console.log("========================================");
-    console.log("REGISTRANDO PESAJE");
-    console.log("Datos recibidos:", {
-      id_animal,
-      fecha_pesaje,
-      peso_kg,
-    });
-    console.log("========================================");
-
-    // --------------------------------------------------------
-    // VALIDACIONES
-    // --------------------------------------------------------
 
     if (!id_animal) {
       return res.status(400).json({
@@ -52,53 +40,41 @@ exports.recordWeight = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------------
-    // VERIFICAR QUE EL ANIMAL EXISTE
-    // --------------------------------------------------------
+    // ========================================================
+    // ANIMAL
+    // ========================================================
 
     const { data: animal, error: animalError } = await supabase
       .from("animals")
-      .select("id, arete, nombre, estado, peso_actual")
+      .select("*")
       .eq("id", id_animal)
       .single();
 
     if (animalError) {
-      console.error("ERROR BUSCANDO ANIMAL:");
-      console.error(animalError);
-
-      return res.status(400).json({
-        error: `No se pudo encontrar el animal: ${animalError.message}`,
-      });
+      throw animalError;
     }
 
-    console.log("Animal encontrado:", animal);
-
-    // --------------------------------------------------------
-    // OBTENER ÚLTIMO PESO
-    // --------------------------------------------------------
+    // ========================================================
+    // ÚLTIMO PESO
+    // ========================================================
 
     const { data: lastWeight, error: lastWeightError } = await supabase
       .from("weights")
       .select("peso_kg, fecha_pesaje")
       .eq("id_animal", id_animal)
-      .order("fecha_pesaje", { ascending: false })
+      .order("fecha_pesaje", {
+        ascending: false,
+      })
       .limit(1)
       .maybeSingle();
 
     if (lastWeightError) {
-      console.error("ERROR BUSCANDO PESO ANTERIOR:");
-      console.error(lastWeightError);
-
-      return res.status(400).json({
-        error: `No se pudo consultar el historial de peso: ${lastWeightError.message}`,
-      });
+      throw lastWeightError;
     }
 
-    console.log("Último peso:", lastWeight);
-
-    // --------------------------------------------------------
-    // CALCULAR GANANCIA DIARIA
-    // --------------------------------------------------------
+    // ========================================================
+    // GANANCIA DIARIA
+    // ========================================================
 
     let gdp = null;
     let diasTranscurridos = null;
@@ -106,95 +82,85 @@ exports.recordWeight = async (req, res) => {
 
     if (lastWeight) {
       const fecha1 = new Date(`${lastWeight.fecha_pesaje}T00:00:00`);
+
       const fecha2 = new Date(`${fecha_pesaje}T00:00:00`);
 
-      diasTranscurridos = Math.floor(
-        (fecha2 - fecha1) / (1000 * 60 * 60 * 24),
-      );
+      diasTranscurridos = Math.floor((fecha2 - fecha1) / (1000 * 60 * 60 * 24));
 
       pesoAnterior = Number(lastWeight.peso_kg);
 
-      console.log("Peso anterior:", pesoAnterior);
-      console.log("Días transcurridos:", diasTranscurridos);
-
       if (diasTranscurridos > 0) {
-        gdp = Number(
-          ((peso - pesoAnterior) / diasTranscurridos).toFixed(3),
-        );
+        gdp = Number(((peso - pesoAnterior) / diasTranscurridos).toFixed(3));
       }
     }
 
-    console.log("GDP calculada:", gdp);
-
-    // --------------------------------------------------------
-    // INSERTAR PESAJE
-    // --------------------------------------------------------
-
-    const pesoData = {
-      id_animal,
-      fecha_pesaje,
-      peso_kg: peso,
-      gdp_diaria: gdp,
-      peso_anterior: pesoAnterior,
-      dias_transcurridos: diasTranscurridos,
-    };
-
-    console.log("Insertando en weights:", pesoData);
+    // ========================================================
+    // GUARDAR PESO
+    // ========================================================
 
     const { data, error } = await supabase
       .from("weights")
-      .insert([pesoData])
+      .insert([
+        {
+          id_animal,
+          fecha_pesaje,
+          peso_kg: peso,
+          gdp_diaria: gdp,
+          peso_anterior: pesoAnterior,
+          dias_transcurridos: diasTranscurridos,
+        },
+      ])
       .select()
       .single();
 
     if (error) {
-      console.error("========================================");
-      console.error("ERROR SUPABASE INSERTANDO PESO");
-      console.error(error);
-      console.error("========================================");
-
-      return res.status(400).json({
-        error: error.message,
-        details: error.details || null,
-        hint: error.hint || null,
-        code: error.code || null,
-      });
+      throw error;
     }
 
-    // --------------------------------------------------------
-    // ACTUALIZAR PESO ACTUAL DEL ANIMAL
-    // --------------------------------------------------------
+    // ========================================================
+    // ACTUALIZAR PESO ACTUAL
+    // ========================================================
 
-    const { error: updateAnimalError } = await supabase
+    const { data: updatedAnimal, error: updateError } = await supabase
       .from("animals")
       .update({
         peso_actual: peso,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", id_animal);
+      .eq("id", id_animal)
+      .select()
+      .single();
 
-    if (updateAnimalError) {
-      console.error("ERROR ACTUALIZANDO PESO ACTUAL DEL ANIMAL:");
-      console.error(updateAnimalError);
-
-      return res.status(400).json({
-        error: `El pesaje fue registrado, pero no se pudo actualizar el peso actual del animal: ${updateAnimalError.message}`,
-      });
+    if (updateError) {
+      throw updateError;
     }
 
-    console.log("Pesaje registrado correctamente:", data);
+    // ========================================================
+    // CATEGORÍA
+    // Maute >= 400 kg + Reproducción -> Toro
+    // ========================================================
 
-    return res.json({
+    await updateAnimalCategory(updatedAnimal, {
+      motivo:
+        peso >= 400 ? "Pesaje confirmó 400 kg o más" : "Actualización de peso",
+      fechaInicio: fecha_pesaje,
+    });
+
+    const { data: finalAnimal } = await supabase
+      .from("animals")
+      .select("*")
+      .eq("id", id_animal)
+      .single();
+
+    res.json({
       success: true,
       data,
+      animal: finalAnimal,
     });
   } catch (err) {
-    console.error("========================================");
-    console.error("ERROR GENERAL recordWeight:");
-    console.error(err);
-    console.error("========================================");
+    console.error("recordWeight:", err);
 
-    return res.status(400).json({
+    res.status(400).json({
       error: err.message || "Error al registrar pesaje",
     });
   }
@@ -208,24 +174,19 @@ exports.getWeightHistory = async (req, res) => {
   try {
     const { id_animal } = req.params;
 
-    console.log("Consultando historial de peso:", id_animal);
-
     const { data, error } = await supabase
       .from("weights")
       .select("*")
       .eq("id_animal", id_animal)
-      .order("fecha_pesaje", { ascending: true });
+      .order("fecha_pesaje", {
+        ascending: true,
+      });
 
     if (error) {
-      console.error("ERROR OBTENIENDO HISTORIAL:");
-      console.error(error);
-
-      return res.status(400).json({
-        error: error.message,
-      });
+      throw error;
     }
 
-    res.json(data);
+    res.json(data || []);
   } catch (err) {
     console.error("getWeightHistory:", err);
 

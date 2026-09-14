@@ -1,131 +1,9 @@
 const supabase = require("../config/database");
-
-// ============================================================
-// CÁLCULO DE CATEGORÍA
-// ============================================================
-
-const calculateCategory = ({
-  sexo,
-  fecha_nacimiento,
-  finalidad,
-  categoriaActual,
-}) => {
-  // Si no conocemos la fecha de nacimiento,
-  // conservamos la categoría actual.
-  if (!fecha_nacimiento) {
-    return categoriaActual || "Becerro";
-  }
-
-  const nacimiento = new Date(`${fecha_nacimiento}T00:00:00`);
-  const hoy = new Date();
-
-  if (Number.isNaN(nacimiento.getTime())) {
-    return categoriaActual || "Becerro";
-  }
-
-  let edadMeses =
-    (hoy.getFullYear() - nacimiento.getFullYear()) * 12 +
-    (hoy.getMonth() - nacimiento.getMonth());
-
-  if (hoy.getDate() < nacimiento.getDate()) {
-    edadMeses--;
-  }
-
-  edadMeses = Math.max(0, edadMeses);
-
-  // HEMBRAS
-  if (sexo === "Hembra") {
-    if (edadMeses <= 7) {
-      return "Becerro";
-    }
-
-    // Por ahora, después lo relacionaremos
-    // con el historial reproductivo.
-    return "Novilla";
-  }
-
-  // MACHOS
-  if (sexo === "Macho") {
-    if (edadMeses <= 7) {
-      return "Becerro";
-    }
-
-    if (edadMeses <= 24) {
-      return "Maute";
-    }
-
-    if (finalidad === "Reproducción") {
-      return "Toro";
-    }
-
-    return "Novillo";
-  }
-
-  return categoriaActual || "Becerro";
-};
-
-// ============================================================
-// SINCRONIZAR CATEGORÍA + HISTORIAL
-// ============================================================
-
-const syncAnimalCategory = async (animal) => {
-  const nuevaCategoria = calculateCategory({
-    sexo: animal.sexo,
-    fecha_nacimiento: animal.fecha_nacimiento,
-    finalidad: animal.finalidad,
-    categoriaActual: animal.categoria,
-  });
-
-  // No hay cambio
-  if (!nuevaCategoria || nuevaCategoria === animal.categoria) {
-    return animal.categoria;
-  }
-
-  const hoy = new Date().toISOString().split("T")[0];
-
-  // Cerrar categoría anterior
-  const { error: closeError } = await supabase
-    .from("animal_category_history")
-    .update({
-      fecha_fin: hoy,
-    })
-    .eq("id_animal", animal.id)
-    .is("fecha_fin", null);
-
-  if (closeError) {
-    throw closeError;
-  }
-
-  // Crear nuevo historial
-  const { error: historyError } = await supabase
-    .from("animal_category_history")
-    .insert({
-      id_animal: animal.id,
-      categoria: nuevaCategoria,
-      fecha_inicio: hoy,
-      fecha_fin: null,
-      motivo: "Actualización automática",
-    });
-
-  if (historyError) {
-    throw historyError;
-  }
-
-  // Actualizar animal
-  const { error: animalError } = await supabase
-    .from("animals")
-    .update({
-      categoria: nuevaCategoria,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", animal.id);
-
-  if (animalError) {
-    throw animalError;
-  }
-
-  return nuevaCategoria;
-};
+const {
+  calculateCategory,
+  updateAnimalCategory,
+  syncAnimalsCategories,
+} = require("../services/animalCategoryService");
 
 // ============================================================
 // CREAR ANIMAL
@@ -157,7 +35,7 @@ exports.createAnimal = async (req, res) => {
       });
     }
 
-    if (!sexo || !["Macho", "Hembra"].includes(sexo)) {
+    if (!["Macho", "Hembra"].includes(sexo)) {
       return res.status(400).json({
         error: "El sexo debe ser Macho o Hembra",
       });
@@ -165,47 +43,38 @@ exports.createAnimal = async (req, res) => {
 
     const categoriaCalculada = calculateCategory({
       sexo,
-      fecha_nacimiento,
+      fecha_destete: null,
+      condicion_reproductiva: sexo === "Hembra" ? null : condicion_reproductiva,
+      peso_actual,
       finalidad,
-      categoriaActual: categoria,
+      hasBirths: false,
     });
 
     const animal = {
       arete: String(arete).trim(),
-
       nombre: nombre || null,
-
       sexo,
-
       fecha_nacimiento: fecha_nacimiento || null,
-
-      categoria: categoriaCalculada,
-
+      categoria:
+        categoriaCalculada ||
+        categoria ||
+        (sexo === "Hembra" ? "Becerra" : "Becerro"),
       raza: raza || null,
-
       color: color || null,
-
       senales_particulares: senales_particulares || senales || null,
-
       id_madre: id_madre || null,
-
       id_padre: id_padre || null,
-
       estado: "Activo",
-
       potrero: potrero || null,
-
       peso_actual:
         peso_actual !== undefined && peso_actual !== null && peso_actual !== ""
           ? Number(peso_actual)
           : null,
-
       finalidad: finalidad || null,
-
-      condicion_reproductiva: condicion_reproductiva || null,
+      condicion_reproductiva:
+        sexo === "Hembra" ? null : condicion_reproductiva || null,
+      fecha_destete: null,
     };
-
-    console.log("Creando animal:", animal);
 
     const { data, error } = await supabase
       .from("animals")
@@ -214,11 +83,9 @@ exports.createAnimal = async (req, res) => {
       .single();
 
     if (error) {
-      console.error("Supabase createAnimal:", error);
       throw error;
     }
 
-    // Registrar primera categoría en historial
     if (data) {
       const { error: historyError } = await supabase
         .from("animal_category_history")
@@ -267,7 +134,7 @@ exports.getAnimals = async (req, res) => {
       throw error;
     }
 
-    res.json(data);
+    res.json(data || []);
   } catch (err) {
     console.error("getAnimals:", err);
 
@@ -318,7 +185,6 @@ exports.updateAnimal = async (req, res) => {
       nombre,
       sexo,
       fecha_nacimiento,
-      categoria,
       raza,
       color,
       senales,
@@ -332,7 +198,6 @@ exports.updateAnimal = async (req, res) => {
       estado,
     } = req.body;
 
-    // Obtener animal actual
     const { data: currentAnimal, error: currentError } = await supabase
       .from("animals")
       .select("*")
@@ -343,33 +208,17 @@ exports.updateAnimal = async (req, res) => {
       throw currentError;
     }
 
-    const sexoFinal = sexo ?? currentAnimal.sexo;
-
-    const fechaNacimientoFinal =
-      fecha_nacimiento ?? currentAnimal.fecha_nacimiento;
-
-    const finalidadFinal = finalidad ?? currentAnimal.finalidad;
-
-    const categoriaNueva = calculateCategory({
-      sexo: sexoFinal,
-      fecha_nacimiento: fechaNacimientoFinal,
-      finalidad: finalidadFinal,
-      categoriaActual: categoria ?? currentAnimal.categoria,
-    });
-
     const updateData = {
       arete: arete !== undefined ? String(arete).trim() : currentAnimal.arete,
 
       nombre: nombre !== undefined ? nombre || null : currentAnimal.nombre,
 
-      sexo: sexoFinal,
+      sexo: sexo ?? currentAnimal.sexo,
 
       fecha_nacimiento:
         fecha_nacimiento !== undefined
           ? fecha_nacimiento || null
           : currentAnimal.fecha_nacimiento,
-
-      categoria: categoriaNueva,
 
       raza: raza !== undefined ? raza || null : currentAnimal.raza,
 
@@ -421,21 +270,189 @@ exports.updateAnimal = async (req, res) => {
       throw error;
     }
 
-    // Si cambió la categoría, registrar historial
-    if (currentAnimal.categoria !== categoriaNueva) {
-      await syncAnimalCategory({
-        ...currentAnimal,
-        ...data,
-        categoria: currentAnimal.categoria,
-      });
+    /*
+     * La categoría no se recibe directamente del frontend.
+     * Se deriva de los indicadores productivos.
+     */
+    await updateAnimalCategory({
+      ...currentAnimal,
+      ...data,
+    });
+
+    const { data: updatedAnimal, error: finalError } = await supabase
+      .from("animals")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (finalError) {
+      throw finalError;
     }
 
     res.json({
       success: true,
-      data,
+      data: updatedAnimal,
     });
   } catch (err) {
     console.error("updateAnimal:", err);
+
+    res.status(400).json({
+      error: err.message,
+    });
+  }
+};
+
+// ============================================================
+// ACTUALIZAR EVENTO PRODUCTIVO
+// ============================================================
+
+exports.updateLifecycle = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { evento, fecha_destete, condicion_reproductiva } = req.body;
+
+    const { data: animal, error: animalError } = await supabase
+      .from("animals")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (animalError) {
+      throw animalError;
+    }
+
+    if (animal.estado !== "Activo") {
+      return res.status(400).json({
+        error: "Solo se pueden actualizar eventos de animales activos",
+      });
+    }
+
+    // ========================================================
+    // DESTETE
+    // ========================================================
+
+    if (evento === "destete") {
+      if (!fecha_destete) {
+        return res.status(400).json({
+          error: "La fecha de destete es obligatoria",
+        });
+      }
+
+      if (animal.categoria !== "Becerro" && animal.categoria !== "Becerra") {
+        return res.status(400).json({
+          error: "Solo un Becerro o Becerra puede registrar el destete",
+        });
+      }
+
+      const updateData = {
+        fecha_destete,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (animal.sexo === "Hembra") {
+        updateData.condicion_reproductiva = "Vacía";
+      }
+
+      const { data: updated, error: updateError } = await supabase
+        .from("animals")
+        .update(updateData)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      await updateAnimalCategory(updated, {
+        motivo: "Destete",
+        fechaInicio: fecha_destete,
+        hasBirths: false,
+      });
+
+      const { data: finalAnimal } = await supabase
+        .from("animals")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      return res.json({
+        success: true,
+        evento: "destete",
+        data: finalAnimal,
+      });
+    }
+
+    // ========================================================
+    // PREÑEZ / CONDICIÓN REPRODUCTIVA
+    // ========================================================
+
+    if (evento === "condicion_reproductiva") {
+      const validConditions = ["Vacía", "Preñada", "Lactando"];
+
+      if (!validConditions.includes(condicion_reproductiva)) {
+        return res.status(400).json({
+          error: "Condición reproductiva no válida",
+        });
+      }
+
+      if (animal.sexo !== "Hembra") {
+        return res.status(400).json({
+          error: "La condición reproductiva solo aplica a hembras",
+        });
+      }
+
+      if (
+        animal.categoria !== "Mauta" &&
+        animal.categoria !== "Novilla" &&
+        animal.categoria !== "Vaca"
+      ) {
+        return res.status(400).json({
+          error:
+            "El indicador reproductivo solo aplica a Mautas, Novillas y Vacas",
+        });
+      }
+
+      const { data: updated, error: updateError } = await supabase
+        .from("animals")
+        .update({
+          condicion_reproductiva,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      await updateAnimalCategory(updated, {
+        motivo:
+          condicion_reproductiva === "Preñada"
+            ? "Preñez registrada"
+            : "Actualización de condición reproductiva",
+        hasBirths: updated.categoria === "Vaca" ? true : null,
+      });
+
+      const { data: finalAnimal } = await supabase
+        .from("animals")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      return res.json({
+        success: true,
+        evento: "condicion_reproductiva",
+        data: finalAnimal,
+      });
+    }
+
+    return res.status(400).json({
+      error: "Evento productivo no válido",
+    });
+  } catch (err) {
+    console.error("updateLifecycle:", err);
 
     res.status(400).json({
       error: err.message,
@@ -460,10 +477,6 @@ exports.updateAnimalStatus = async (req, res) => {
       });
     }
 
-    // ==========================================================
-    // BAJA DEL ANIMAL
-    // ==========================================================
-
     if (estado === "Muerto" || estado === "Desaparecido") {
       if (!fecha_baja) {
         return res.status(400).json({
@@ -471,25 +484,6 @@ exports.updateAnimalStatus = async (req, res) => {
         });
       }
 
-      // Evitar registrar una segunda baja
-      const { data: existingDischarge, error: dischargeCheckError } =
-        await supabase
-          .from("animal_discharges")
-          .select("id")
-          .eq("id_animal", id)
-          .limit(1);
-
-      if (dischargeCheckError) {
-        throw dischargeCheckError;
-      }
-
-      if (existingDischarge?.length > 0) {
-        return res.status(400).json({
-          error: "Este animal ya tiene una baja registrada",
-        });
-      }
-
-      // Registrar historial de baja
       const { error: dischargeError } = await supabase
         .from("animal_discharges")
         .insert([
@@ -506,57 +500,10 @@ exports.updateAnimalStatus = async (req, res) => {
       }
     }
 
-    // ==========================================================
-    // ACTUALIZAR ESTADO
-    // ==========================================================
-
     const { data, error } = await supabase
       .from("animals")
       .update({
         estado,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select();
-
-    if (error) throw error;
-
-    if (!data?.length) {
-      return res.status(404).json({
-        error: "Animal no encontrado",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: data[0],
-    });
-  } catch (err) {
-    console.error("updateAnimalStatus:", err);
-
-    res.status(400).json({
-      error: err.message,
-    });
-  }
-};
-
-// ============================================================
-// DELETE NORMAL
-// ============================================================
-//
-// Se conserva para compatibilidad con el frontend actual.
-// NO elimina físicamente.
-// Cambia el animal a "Desaparecido".
-// ============================================================
-
-exports.deleteAnimal = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const { data, error } = await supabase
-      .from("animals")
-      .update({
-        estado: "Desaparecido",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
@@ -570,10 +517,9 @@ exports.deleteAnimal = async (req, res) => {
     res.json({
       success: true,
       data,
-      message: "Animal dado de baja correctamente",
     });
   } catch (err) {
-    console.error("deleteAnimal:", err);
+    console.error("updateAnimalStatus:", err);
 
     res.status(400).json({
       error: err.message,
@@ -584,15 +530,11 @@ exports.deleteAnimal = async (req, res) => {
 // ============================================================
 // ELIMINACIÓN PERMANENTE
 // ============================================================
-//
-// SOLO para datos de prueba o registros creados por error.
-// ============================================================
 
 exports.deleteAnimalPermanent = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Verificar que existe
     const { data: animal, error: findError } = await supabase
       .from("animals")
       .select("id, arete, nombre")
@@ -603,7 +545,6 @@ exports.deleteAnimalPermanent = async (req, res) => {
       throw findError;
     }
 
-    // Eliminar físicamente
     const { error } = await supabase.from("animals").delete().eq("id", id);
 
     if (error) {
@@ -631,36 +572,18 @@ exports.syncCategories = async (req, res) => {
   try {
     const { data: animals, error } = await supabase
       .from("animals")
-      .select(
-        `
-          id,
-          sexo,
-          fecha_nacimiento,
-          finalidad,
-          categoria
-        `,
-      )
+      .select("*")
       .eq("estado", "Activo");
 
     if (error) {
       throw error;
     }
 
-    let actualizados = 0;
-
-    for (const animal of animals) {
-      const categoriaAnterior = animal.categoria;
-
-      const categoriaNueva = await syncAnimalCategory(animal);
-
-      if (categoriaNueva !== categoriaAnterior) {
-        actualizados++;
-      }
-    }
+    const actualizados = await syncAnimalsCategories(animals || []);
 
     return res.json({
       success: true,
-      animales_revisados: animals.length,
+      animales_revisados: animals?.length || 0,
       categorias_actualizadas: actualizados,
     });
   } catch (err) {
@@ -672,7 +595,10 @@ exports.syncCategories = async (req, res) => {
   }
 };
 
-// Registrar baja de un animal
+// ============================================================
+// REGISTRAR BAJA
+// ============================================================
+
 exports.registerDischarge = async (req, res) => {
   try {
     const { id } = req.params;
@@ -696,7 +622,9 @@ exports.registerDischarge = async (req, res) => {
       .eq("id", id)
       .single();
 
-    if (animalError) throw animalError;
+    if (animalError) {
+      throw animalError;
+    }
 
     if (animal.estado !== "Activo") {
       return res.status(400).json({
@@ -705,7 +633,7 @@ exports.registerDischarge = async (req, res) => {
     }
 
     const { data: baja, error: bajaError } = await supabase
-      .from("animal_bajas")
+      .from("animal_discharges")
       .insert([
         {
           id_animal: id,
@@ -717,27 +645,34 @@ exports.registerDischarge = async (req, res) => {
       .select()
       .single();
 
-    if (bajaError) throw bajaError;
+    if (bajaError) {
+      throw bajaError;
+    }
 
     const nuevoEstado = motivo === "Muerto" ? "Muerto" : "Desaparecido";
 
-    const { error: updateError } = await supabase
+    const { data, error: updateError } = await supabase
       .from("animals")
       .update({
         estado: nuevoEstado,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select()
+      .single();
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      throw updateError;
+    }
 
     res.status(201).json({
       success: true,
       baja,
       estado: nuevoEstado,
+      data,
     });
   } catch (err) {
-    console.error("Error registrando baja:", err);
+    console.error("registerDischarge:", err);
 
     res.status(400).json({
       error: err.message,
@@ -745,7 +680,10 @@ exports.registerDischarge = async (req, res) => {
   }
 };
 
-// Obtener historial de bajas de un animal
+// ============================================================
+// HISTORIAL DE BAJAS
+// ============================================================
+
 exports.getAnimalDischarges = async (req, res) => {
   try {
     const { id } = req.params;
@@ -763,13 +701,17 @@ exports.getAnimalDischarges = async (req, res) => {
       `,
       )
       .eq("id_animal", id)
-      .order("fecha_baja", { ascending: false });
+      .order("fecha_baja", {
+        ascending: false,
+      });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     res.json({
       success: true,
-      data,
+      data: data || [],
     });
   } catch (err) {
     console.error("getAnimalDischarges:", err);

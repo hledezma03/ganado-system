@@ -4,27 +4,58 @@ import { animalService } from "../services/api";
 import AnimalForm from "../components/AnimalForm";
 import AnimalEditModal from "../components/AnimalEditModal";
 
+const today = () => new Date().toISOString().split("T")[0];
+
 export default function AnimalsPage() {
   const [animals, setAnimals] = useState([]);
+
   const [loading, setLoading] = useState(true);
 
   const [editingAnimal, setEditingAnimal] = useState(null);
+
+  // ==========================================================
+  // DESTETE
+  // ==========================================================
+
+  const [weaningAnimal, setWeaningAnimal] = useState(null);
+
+  const [weaningDate, setWeaningDate] = useState(today());
+
+  const [savingWeaning, setSavingWeaning] = useState(false);
+
+  // ==========================================================
+  // BAJA
+  // ==========================================================
+
   const [dischargeAnimal, setDischargeAnimal] = useState(null);
 
   const [dischargeForm, setDischargeForm] = useState({
-    fecha_baja: new Date().toISOString().split("T")[0],
+    fecha_baja: today(),
     motivo: "Muerto",
     notas: "",
   });
 
   const [dischargeHistory, setDischargeHistory] = useState([]);
+
   const [loadingDischarges, setLoadingDischarges] = useState(false);
+
   const [dischargeHistoryAnimal, setDischargeHistoryAnimal] = useState(null);
 
+  // ==========================================================
+  // FILTROS
+  // ==========================================================
+
   const [search, setSearch] = useState("");
+
   const [filterSexo, setFilterSexo] = useState("Todos");
+
   const [filterCategoria, setFilterCategoria] = useState("Todas");
+
   const [filterEstado, setFilterEstado] = useState("Todos");
+
+  // ==========================================================
+  // CARGAR
+  // ==========================================================
 
   useEffect(() => {
     fetchAnimals();
@@ -34,20 +65,21 @@ export default function AnimalsPage() {
     try {
       setLoading(true);
 
-      const data = await animalService.getAll();
+      const response = await animalService.getAll();
 
-      setAnimals(Array.isArray(data) ? data : data?.data || []);
-    } catch (err) {
-      console.error(err);
-      toast.error("Error cargando animales");
+      setAnimals(Array.isArray(response) ? response : response?.data || []);
+    } catch (error) {
+      console.error(error);
+
+      toast.error(error?.response?.data?.error || "Error cargando animales");
     } finally {
       setLoading(false);
     }
   };
 
-  // ============================================================
+  // ==========================================================
   // CATEGORÍAS
-  // ============================================================
+  // ==========================================================
 
   const handleSyncCategories = async () => {
     try {
@@ -58,18 +90,72 @@ export default function AnimalsPage() {
       );
 
       await fetchAnimals();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
 
       toast.error(
-        err?.response?.data?.error || "Error actualizando categorías",
+        error?.response?.data?.error || "Error actualizando categorías",
       );
     }
   };
 
-  // ============================================================
+  // ==========================================================
+  // DESTETE
+  // ==========================================================
+
+  const openWeaningModal = (animal) => {
+    setWeaningAnimal(animal);
+    setWeaningDate(animal.fecha_destete || today());
+  };
+
+  const closeWeaningModal = () => {
+    if (savingWeaning) return;
+
+    setWeaningAnimal(null);
+    setWeaningDate(today());
+  };
+
+  const handleWeaningSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!weaningAnimal) {
+      return;
+    }
+
+    if (!weaningDate) {
+      toast.error("Selecciona la fecha del destete");
+      return;
+    }
+
+    try {
+      setSavingWeaning(true);
+
+      await animalService.updateLifecycle(weaningAnimal.id, {
+        evento: "destete",
+        fecha_destete: weaningDate,
+      });
+
+      const newCategory = weaningAnimal.sexo === "Hembra" ? "Mauta" : "Maute";
+
+      toast.success(`Destete registrado. El animal ahora es ${newCategory}.`);
+
+      closeWeaningModal();
+
+      await fetchAnimals();
+    } catch (error) {
+      console.error(error);
+
+      toast.error(
+        error?.response?.data?.error || "No se pudo registrar el destete",
+      );
+    } finally {
+      setSavingWeaning(false);
+    }
+  };
+
+  // ==========================================================
   // CAMBIO DE ESTADO
-  // ============================================================
+  // ==========================================================
 
   const handleStatusChange = async (animal, estado) => {
     try {
@@ -78,22 +164,22 @@ export default function AnimalsPage() {
       toast.success(`Animal marcado como ${estado}`);
 
       await fetchAnimals();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
 
-      toast.error(err?.response?.data?.error || "Error actualizando estado");
+      toast.error(error?.response?.data?.error || "Error actualizando estado");
     }
   };
 
-  // ============================================================
-  // MODAL DE BAJA
-  // ============================================================
+  // ==========================================================
+  // BAJA
+  // ==========================================================
 
   const openDischargeModal = (animal) => {
     setDischargeAnimal(animal);
 
     setDischargeForm({
-      fecha_baja: new Date().toISOString().split("T")[0],
+      fecha_baja: today(),
       motivo: "Muerto",
       notas: "",
     });
@@ -103,16 +189,18 @@ export default function AnimalsPage() {
     setDischargeAnimal(null);
 
     setDischargeForm({
-      fecha_baja: new Date().toISOString().split("T")[0],
+      fecha_baja: today(),
       motivo: "Muerto",
       notas: "",
     });
   };
 
-  const handleDischargeSubmit = async (e) => {
-    e.preventDefault();
+  const handleDischargeSubmit = async (event) => {
+    event.preventDefault();
 
-    if (!dischargeAnimal) return;
+    if (!dischargeAnimal) {
+      return;
+    }
 
     if (!dischargeForm.fecha_baja) {
       toast.error("Selecciona la fecha de baja");
@@ -133,16 +221,16 @@ export default function AnimalsPage() {
       closeDischargeModal();
 
       await fetchAnimals();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
 
-      toast.error(err?.response?.data?.error || "Error registrando la baja");
+      toast.error(error?.response?.data?.error || "Error registrando la baja");
     }
   };
 
-  // ============================================================
-  // HISTORIAL DE BAJAS
-  // ============================================================
+  // ==========================================================
+  // HISTORIAL BAJAS
+  // ==========================================================
 
   const handleViewDischargeHistory = async (animal) => {
     try {
@@ -154,11 +242,11 @@ export default function AnimalsPage() {
       setDischargeHistory(
         Array.isArray(response) ? response : response?.data || [],
       );
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
 
       toast.error(
-        err?.response?.data?.error || "Error cargando historial de bajas",
+        error?.response?.data?.error || "Error cargando historial de bajas",
       );
 
       setDischargeHistory([]);
@@ -172,9 +260,9 @@ export default function AnimalsPage() {
     setDischargeHistory([]);
   };
 
-  // ============================================================
+  // ==========================================================
   // ELIMINACIÓN PERMANENTE
-  // ============================================================
+  // ==========================================================
 
   const handlePermanentDelete = async (animal) => {
     const confirmed = window.confirm(
@@ -188,7 +276,9 @@ export default function AnimalsPage() {
         `¿Deseas continuar?`,
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     try {
       await animalService.deletePermanent(animal.id);
@@ -196,18 +286,18 @@ export default function AnimalsPage() {
       toast.success("Animal eliminado permanentemente");
 
       await fetchAnimals();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
 
       toast.error(
-        err?.response?.data?.error || "No se pudo eliminar el animal",
+        error?.response?.data?.error || "No se pudo eliminar el animal",
       );
     }
   };
 
-  // ============================================================
+  // ==========================================================
   // FILTROS
-  // ============================================================
+  // ==========================================================
 
   const filteredAnimals = useMemo(() => {
     const text = search.trim().toLowerCase();
@@ -234,9 +324,9 @@ export default function AnimalsPage() {
     });
   }, [animals, search, filterSexo, filterCategoria, filterEstado]);
 
-  // ============================================================
+  // ==========================================================
   // ESTILOS
-  // ============================================================
+  // ==========================================================
 
   const getStatusClass = (estado) => {
     switch (estado) {
@@ -260,9 +350,11 @@ export default function AnimalsPage() {
   const getCategoryClass = (categoria) => {
     switch (categoria) {
       case "Becerro":
+      case "Becerra":
         return "bg-yellow-100 text-yellow-800";
 
       case "Maute":
+      case "Mauta":
         return "bg-orange-100 text-orange-800";
 
       case "Novilla":
@@ -282,24 +374,22 @@ export default function AnimalsPage() {
     }
   };
 
-  // ============================================================
+  // ==========================================================
   // RENDER
-  // ============================================================
+  // ==========================================================
 
   return (
     <div className="space-y-6">
-      {/* ======================================================
-          ENCABEZADO
-      ====================================================== */}
+      {/* HEADER */}
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="rounded-lg bg-white p-6 shadow">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-blue-900">
               Animales Registrados
             </h2>
 
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="mt-1 text-sm text-gray-500">
               {filteredAnimals.length} de {animals.length} animales
             </p>
           </div>
@@ -308,7 +398,7 @@ export default function AnimalsPage() {
             <button
               type="button"
               onClick={fetchAnimals}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+              className="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-100"
             >
               ↻ Actualizar
             </button>
@@ -316,30 +406,28 @@ export default function AnimalsPage() {
             <button
               type="button"
               onClick={handleSyncCategories}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              className="rounded-lg bg-green-600 px-4 py-2 font-bold text-white hover:bg-green-700"
             >
               🔄 Actualizar categorías
             </button>
           </div>
         </div>
 
-        {/* ====================================================
-            FILTROS
-        ==================================================== */}
+        {/* FILTROS */}
 
-        <div className="grid md:grid-cols-4 gap-3 mt-6">
+        <div className="mt-6 grid gap-3 md:grid-cols-4">
           <input
             type="text"
             placeholder="Buscar por arete o nombre..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-300 rounded-lg p-2"
+            onChange={(event) => setSearch(event.target.value)}
+            className="rounded-lg border border-gray-300 p-2"
           />
 
           <select
             value={filterSexo}
-            onChange={(e) => setFilterSexo(e.target.value)}
-            className="border border-gray-300 rounded-lg p-2"
+            onChange={(event) => setFilterSexo(event.target.value)}
+            className="rounded-lg border border-gray-300 p-2"
           >
             <option value="Todos">Todos los sexos</option>
             <option value="Macho">Machos</option>
@@ -348,37 +436,49 @@ export default function AnimalsPage() {
 
           <select
             value={filterCategoria}
-            onChange={(e) => setFilterCategoria(e.target.value)}
-            className="border border-gray-300 rounded-lg p-2"
+            onChange={(event) => setFilterCategoria(event.target.value)}
+            className="rounded-lg border border-gray-300 p-2"
           >
             <option value="Todas">Todas las categorías</option>
+
             <option value="Becerro">Becerro</option>
+
+            <option value="Becerra">Becerra</option>
+
             <option value="Maute">Maute</option>
+
+            <option value="Mauta">Mauta</option>
+
             <option value="Novilla">Novilla</option>
+
             <option value="Vaca">Vaca</option>
+
             <option value="Toro">Toro</option>
+
             <option value="Novillo">Novillo</option>
           </select>
 
           <select
             value={filterEstado}
-            onChange={(e) => setFilterEstado(e.target.value)}
-            className="border border-gray-300 rounded-lg p-2"
+            onChange={(event) => setFilterEstado(event.target.value)}
+            className="rounded-lg border border-gray-300 p-2"
           >
             <option value="Todos">Todos los estados</option>
+
             <option value="Activo">Activos</option>
+
             <option value="Vendido">Vendidos</option>
+
             <option value="Muerto">Muertos</option>
+
             <option value="Desaparecido">Desaparecidos</option>
           </select>
         </div>
       </div>
 
-      {/* ======================================================
-          TABLA
-      ====================================================== */}
+      {/* TABLA */}
 
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="rounded-lg bg-white p-6 shadow">
         {loading ? (
           <p className="text-gray-500">Cargando animales...</p>
         ) : filteredAnimals.length === 0 ? (
@@ -391,11 +491,17 @@ export default function AnimalsPage() {
               <thead className="bg-gray-100">
                 <tr>
                   <th className="p-3 text-left">Arete</th>
+
                   <th className="p-3 text-left">Nombre</th>
+
                   <th className="p-3 text-left">Sexo</th>
+
                   <th className="p-3 text-left">Categoría</th>
+
                   <th className="p-3 text-left">Peso</th>
+
                   <th className="p-3 text-left">Estado</th>
+
                   <th className="p-3 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -411,7 +517,7 @@ export default function AnimalsPage() {
 
                     <td className="p-3">
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getCategoryClass(
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${getCategoryClass(
                           animal.categoria,
                         )}`}
                       >
@@ -420,12 +526,14 @@ export default function AnimalsPage() {
                     </td>
 
                     <td className="p-3">
-                      {animal.peso_actual ? `${animal.peso_actual} kg` : "-"}
+                      {animal.peso_actual != null
+                        ? `${animal.peso_actual} kg`
+                        : "-"}
                     </td>
 
                     <td className="p-3">
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${getStatusClass(
                           animal.estado,
                         )}`}
                       >
@@ -434,55 +542,62 @@ export default function AnimalsPage() {
                     </td>
 
                     <td className="p-3">
-                      <div className="flex justify-end gap-2 flex-wrap">
-                        {/* EDITAR */}
+                      <div className="flex flex-wrap justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setEditingAnimal(animal)}
-                          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700"
                         >
                           Editar
                         </button>
 
-                        {/* RECUPERAR */}
+                        {(animal.categoria === "Becerro" ||
+                          animal.categoria === "Becerra") &&
+                          animal.estado === "Activo" && (
+                            <button
+                              type="button"
+                              onClick={() => openWeaningModal(animal)}
+                              className="rounded bg-orange-500 px-3 py-1 font-bold text-white hover:bg-orange-600"
+                            >
+                              Registrar destete
+                            </button>
+                          )}
+
                         {animal.estado === "Desaparecido" && (
                           <button
                             type="button"
                             onClick={() => handleStatusChange(animal, "Activo")}
-                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                            className="rounded bg-green-600 px-3 py-1 text-white hover:bg-green-700"
                           >
                             Recuperar
                           </button>
                         )}
 
-                        {/* DAR DE BAJA */}
                         {animal.estado === "Activo" && (
                           <button
                             type="button"
                             onClick={() => openDischargeModal(animal)}
-                            className="px-3 py-1 bg-orange-500 text-white rounded hover:bg-orange-600"
+                            className="rounded bg-orange-500 px-3 py-1 text-white hover:bg-orange-600"
                           >
                             Dar de baja
                           </button>
                         )}
 
-                        {/* HISTORIAL */}
                         {(animal.estado === "Muerto" ||
                           animal.estado === "Desaparecido") && (
                           <button
                             type="button"
                             onClick={() => handleViewDischargeHistory(animal)}
-                            className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+                            className="rounded bg-gray-600 px-3 py-1 text-white hover:bg-gray-700"
                           >
                             Historial
                           </button>
                         )}
 
-                        {/* ELIMINACIÓN PERMANENTE */}
                         <button
                           type="button"
                           onClick={() => handlePermanentDelete(animal)}
-                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                          className="rounded bg-red-600 px-3 py-1 text-white hover:bg-red-700"
                         >
                           Eliminar
                         </button>
@@ -496,15 +611,11 @@ export default function AnimalsPage() {
         )}
       </div>
 
-      {/* ======================================================
-          FORMULARIO NUEVO
-      ====================================================== */}
+      {/* FORMULARIO NUEVO */}
 
       <AnimalForm onSuccess={fetchAnimals} />
 
-      {/* ======================================================
-          MODAL EDICIÓN
-      ====================================================== */}
+      {/* MODAL EDICIÓN */}
 
       {editingAnimal && (
         <AnimalEditModal
@@ -515,62 +626,127 @@ export default function AnimalsPage() {
       )}
 
       {/* ======================================================
-          MODAL DAR DE BAJA
+          MODAL DESTETE
+      ====================================================== */}
+
+      {weaningAnimal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-blue-900">
+                  Registrar destete
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Arete: <strong>{weaningAnimal.arete}</strong>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeWeaningModal}
+                className="text-2xl text-gray-500"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleWeaningSubmit} className="space-y-5">
+              <div className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800">
+                Al registrar el destete, la categoría se actualizará
+                automáticamente a{" "}
+                <strong>
+                  {weaningAnimal.sexo === "Hembra" ? "Mauta" : "Maute"}
+                </strong>
+                .
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-bold">
+                  Fecha del destete *
+                </label>
+
+                <input
+                  type="date"
+                  value={weaningDate}
+                  onChange={(event) => setWeaningDate(event.target.value)}
+                  disabled={savingWeaning}
+                  required
+                  className="w-full rounded-lg border p-3"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeWeaningModal}
+                  disabled={savingWeaning}
+                  className="rounded-lg border px-5 py-2 font-bold"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={savingWeaning}
+                  className="rounded-lg bg-orange-500 px-5 py-2 font-bold text-white hover:bg-orange-600 disabled:bg-gray-400"
+                >
+                  {savingWeaning ? "Guardando..." : "Confirmar destete"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================
+          MODAL BAJA
       ====================================================== */}
 
       {dischargeAnimal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-6 border-b">
-              <h2 className="text-xl font-bold text-gray-900">
-                Dar de baja animal
-              </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b p-6">
+              <h2 className="text-xl font-bold">Dar de baja animal</h2>
 
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="mt-1 text-sm text-gray-500">
                 Arete: <strong>{dischargeAnimal.arete}</strong>
               </p>
-
-              {dischargeAnimal.nombre && (
-                <p className="text-sm text-gray-500">
-                  Nombre: {dischargeAnimal.nombre}
-                </p>
-              )}
             </div>
 
-            <form onSubmit={handleDischargeSubmit} className="p-6 space-y-4">
-              {/* FECHA */}
+            <form onSubmit={handleDischargeSubmit} className="space-y-4 p-6">
               <div>
-                <label className="block text-sm font-bold mb-1">
+                <label className="mb-1 block text-sm font-bold">
                   Fecha de baja *
                 </label>
 
                 <input
                   type="date"
                   value={dischargeForm.fecha_baja}
-                  onChange={(e) =>
-                    setDischargeForm((prev) => ({
-                      ...prev,
-                      fecha_baja: e.target.value,
+                  onChange={(event) =>
+                    setDischargeForm((previous) => ({
+                      ...previous,
+                      fecha_baja: event.target.value,
                     }))
                   }
                   required
-                  className="w-full border border-gray-300 rounded-lg p-2"
+                  className="w-full rounded-lg border p-2"
                 />
               </div>
 
-              {/* MOTIVO */}
               <div>
-                <label className="block text-sm font-bold mb-1">Motivo *</label>
+                <label className="mb-1 block text-sm font-bold">Motivo *</label>
 
                 <select
                   value={dischargeForm.motivo}
-                  onChange={(e) =>
-                    setDischargeForm((prev) => ({
-                      ...prev,
-                      motivo: e.target.value,
+                  onChange={(event) =>
+                    setDischargeForm((previous) => ({
+                      ...previous,
+                      motivo: event.target.value,
                     }))
                   }
-                  className="w-full border border-gray-300 rounded-lg p-2"
+                  className="w-full rounded-lg border p-2"
                 >
                   <option value="Muerto">Muerto</option>
 
@@ -578,37 +754,34 @@ export default function AnimalsPage() {
                 </select>
               </div>
 
-              {/* NOTAS */}
               <div>
-                <label className="block text-sm font-bold mb-1">Notas</label>
+                <label className="mb-1 block text-sm font-bold">Notas</label>
 
                 <textarea
                   value={dischargeForm.notas}
-                  onChange={(e) =>
-                    setDischargeForm((prev) => ({
-                      ...prev,
-                      notas: e.target.value,
+                  onChange={(event) =>
+                    setDischargeForm((previous) => ({
+                      ...previous,
+                      notas: event.target.value,
                     }))
                   }
                   rows="3"
-                  placeholder="Observaciones..."
-                  className="w-full border border-gray-300 rounded-lg p-2"
+                  className="w-full rounded-lg border p-2"
                 />
               </div>
 
-              {/* BOTONES */}
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={closeDischargeModal}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+                  className="rounded-lg border px-4 py-2"
                 >
                   Cancelar
                 </button>
 
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                  className="rounded-lg bg-orange-500 px-4 py-2 font-bold text-white"
                 >
                   Confirmar baja
                 </button>
@@ -619,82 +792,66 @@ export default function AnimalsPage() {
       )}
 
       {/* ======================================================
-          MODAL HISTORIAL DE BAJAS
+          HISTORIAL BAJAS
       ====================================================== */}
 
       {dischargeHistoryAnimal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            {/* CABECERA */}
-            <div className="flex items-center justify-between p-6 border-b">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b p-6">
               <div>
                 <h2 className="text-2xl font-bold text-blue-900">
                   Historial de baja
                 </h2>
 
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="mt-1 text-sm text-gray-500">
                   Animal: <strong>{dischargeHistoryAnimal.arete}</strong>
-                  {dischargeHistoryAnimal.nombre
-                    ? ` · ${dischargeHistoryAnimal.nombre}`
-                    : ""}
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={closeDischargeHistory}
-                className="text-gray-500 hover:text-gray-800 text-2xl leading-none"
-                aria-label="Cerrar"
+                className="text-2xl text-gray-500"
               >
                 ×
               </button>
             </div>
 
-            {/* CONTENIDO */}
             <div className="p-6">
               {loadingDischarges ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">Cargando historial...</p>
-                </div>
+                <p className="py-8 text-center text-gray-500">
+                  Cargando historial...
+                </p>
               ) : dischargeHistory.length === 0 ? (
-                <div className="border border-dashed rounded-lg p-8 text-center">
-                  <p className="text-gray-500">
-                    No hay bajas registradas para este animal.
-                  </p>
-                </div>
+                <p className="rounded-lg border border-dashed p-8 text-center text-gray-500">
+                  No hay bajas registradas.
+                </p>
               ) : (
                 <div className="space-y-4">
                   {dischargeHistory.map((discharge) => (
-                    <div key={discharge.id} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start gap-4">
+                    <div key={discharge.id} className="rounded-lg border p-4">
+                      <div className="flex items-start justify-between">
                         <div>
-                          <p className="font-bold text-gray-900">
-                            {discharge.motivo}
-                          </p>
+                          <p className="font-bold">{discharge.motivo}</p>
 
-                          <p className="text-sm text-gray-600 mt-1">
-                            Fecha de baja: {discharge.fecha_baja}
+                          <p className="mt-1 text-sm text-gray-600">
+                            Fecha: {discharge.fecha_baja}
                           </p>
                         </div>
 
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-bold ${
-                            discharge.motivo === "Muerto"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }`}
-                        >
+                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold">
                           {discharge.motivo}
                         </span>
                       </div>
 
                       {discharge.notas && (
-                        <div className="mt-3 bg-gray-50 rounded p-3">
+                        <div className="mt-3 rounded bg-gray-50 p-3">
                           <p className="text-xs font-bold text-gray-500">
                             Observaciones
                           </p>
 
-                          <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
                             {discharge.notas}
                           </p>
                         </div>
@@ -704,12 +861,11 @@ export default function AnimalsPage() {
                 </div>
               )}
 
-              {/* BOTÓN CERRAR */}
-              <div className="flex justify-end mt-6">
+              <div className="mt-6 flex justify-end">
                 <button
                   type="button"
                   onClick={closeDischargeHistory}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+                  className="rounded-lg border px-4 py-2 font-bold"
                 >
                   Cerrar
                 </button>

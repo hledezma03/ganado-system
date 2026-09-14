@@ -1,4 +1,5 @@
 const supabase = require("../config/database");
+const { updateAnimalCategory } = require("../services/animalCategoryService");
 
 // ============================================================
 // REGISTRAR PARTO
@@ -16,7 +17,7 @@ exports.recordBirth = async (req, res) => {
 
     if (!id_vaca) {
       return res.status(400).json({
-        error: "La vaca es obligatoria",
+        error: "La madre es obligatoria",
       });
     }
 
@@ -32,39 +33,69 @@ exports.recordBirth = async (req, res) => {
       });
     }
 
-    // ----------------------------------------------------------
-    // Verificar que la vaca exista y sea hembra
-    // ----------------------------------------------------------
+    // ========================================================
+    // VERIFICAR MADRE
+    // ========================================================
 
-    const { data: vaca, error: vacaError } = await supabase
+    const { data: madre, error: madreError } = await supabase
       .from("animals")
-      .select("id, arete, nombre, sexo")
+      .select("*")
       .eq("id", id_vaca)
       .single();
 
-    if (vacaError) throw vacaError;
+    if (madreError) {
+      throw madreError;
+    }
 
-    if (vaca.sexo !== "Hembra") {
+    if (madre.sexo !== "Hembra") {
       return res.status(400).json({
         error: "El animal seleccionado como madre no es una hembra",
       });
     }
 
-    // ----------------------------------------------------------
-    // Verificar que la cría exista
-    // ----------------------------------------------------------
+    if (madre.categoria !== "Novilla" && madre.categoria !== "Vaca") {
+      return res.status(400).json({
+        error: "Solo una Novilla o Vaca puede registrar un parto",
+      });
+    }
+
+    // ========================================================
+    // VERIFICAR CRÍA
+    // ========================================================
 
     const { data: cria, error: criaError } = await supabase
       .from("animals")
-      .select("id, arete, nombre, sexo, fecha_nacimiento, id_madre, estado")
+      .select(
+        "id, arete, nombre, sexo, fecha_nacimiento, id_madre, estado, categoria",
+      )
       .eq("id", id_cria)
       .single();
 
-    if (criaError) throw criaError;
+    if (criaError) {
+      throw criaError;
+    }
 
-    // ----------------------------------------------------------
-    // Evitar registrar la misma cría dos veces
-    // ----------------------------------------------------------
+    if (cria.estado !== "Activo") {
+      return res.status(400).json({
+        error: "La cría debe estar activa",
+      });
+    }
+
+    if (cria.categoria !== "Becerro" && cria.categoria !== "Becerra") {
+      return res.status(400).json({
+        error: "La cría debe estar registrada como Becerro o Becerra",
+      });
+    }
+
+    if (cria.id_madre) {
+      return res.status(400).json({
+        error: "Esta cría ya tiene una madre registrada",
+      });
+    }
+
+    // ========================================================
+    // EVITAR DUPLICAR PARTO
+    // ========================================================
 
     const { data: existingBirth, error: existingError } = await supabase
       .from("reproduction")
@@ -72,7 +103,9 @@ exports.recordBirth = async (req, res) => {
       .eq("id_cria", id_cria)
       .maybeSingle();
 
-    if (existingError) throw existingError;
+    if (existingError) {
+      throw existingError;
+    }
 
     if (existingBirth) {
       return res.status(400).json({
@@ -80,9 +113,9 @@ exports.recordBirth = async (req, res) => {
       });
     }
 
-    // ----------------------------------------------------------
-    // Validar fecha de nacimiento de la cría
-    // ----------------------------------------------------------
+    // ========================================================
+    // FECHA DE NACIMIENTO
+    // ========================================================
 
     if (cria.fecha_nacimiento && cria.fecha_nacimiento !== fecha_parto_real) {
       return res.status(400).json({
@@ -91,20 +124,24 @@ exports.recordBirth = async (req, res) => {
       });
     }
 
-    // ----------------------------------------------------------
-    // Buscar último parto de la vaca
-    // ----------------------------------------------------------
+    // ========================================================
+    // ÚLTIMO PARTO
+    // ========================================================
 
     const { data: previousBirth, error: previousError } = await supabase
       .from("reproduction")
       .select("fecha_parto_real")
       .eq("id_vaca", id_vaca)
       .not("fecha_parto_real", "is", null)
-      .order("fecha_parto_real", { ascending: false })
+      .order("fecha_parto_real", {
+        ascending: false,
+      })
       .limit(1)
       .maybeSingle();
 
-    if (previousError) throw previousError;
+    if (previousError) {
+      throw previousError;
+    }
 
     let iep_dias = null;
 
@@ -127,11 +164,11 @@ exports.recordBirth = async (req, res) => {
       }
     }
 
-    // ----------------------------------------------------------
-    // Registrar parto
-    // ----------------------------------------------------------
+    // ========================================================
+    // REGISTRAR PARTO
+    // ========================================================
 
-    const { data, error } = await supabase
+    const { data: birth, error: birthError } = await supabase
       .from("reproduction")
       .insert([
         {
@@ -151,13 +188,15 @@ exports.recordBirth = async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (birthError) {
+      throw birthError;
+    }
 
-    // ----------------------------------------------------------
-    // Actualizar relación madre → cría
-    // ----------------------------------------------------------
+    // ========================================================
+    // ACTUALIZAR CRÍA
+    // ========================================================
 
-    const { data: updatedCria, error: updateCriaError } = await supabase
+    const { data: updatedCalf, error: calfError } = await supabase
       .from("animals")
       .update({
         id_madre: id_vaca,
@@ -168,13 +207,53 @@ exports.recordBirth = async (req, res) => {
       .select()
       .single();
 
-    if (updateCriaError) throw updateCriaError;
+    if (calfError) {
+      throw calfError;
+    }
+
+    // ========================================================
+    // ACTUALIZAR MADRE
+    // Novilla -> Vaca
+    // Vaca -> Vaca
+    // Condición -> Lactando
+    // ========================================================
+
+    const { data: updatedMother, error: motherUpdateError } = await supabase
+      .from("animals")
+      .update({
+        condicion_reproductiva: "Lactando",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id_vaca)
+      .select()
+      .single();
+
+    if (motherUpdateError) {
+      throw motherUpdateError;
+    }
+
+    await updateAnimalCategory(updatedMother, {
+      motivo: madre.categoria === "Novilla" ? "Primer parto" : "Nuevo parto",
+      fechaInicio: fecha_parto_real,
+      hasBirths: true,
+    });
+
+    const { data: finalMother, error: finalMotherError } = await supabase
+      .from("animals")
+      .select("*")
+      .eq("id", id_vaca)
+      .single();
+
+    if (finalMotherError) {
+      throw finalMotherError;
+    }
 
     return res.status(201).json({
       success: true,
       message: "Parto registrado correctamente",
-      data,
-      cria: updatedCria,
+      data: birth,
+      madre: finalMother,
+      cria: updatedCalf,
       intervalo_partos_dias: iep_dias,
     });
   } catch (err) {
@@ -187,7 +266,7 @@ exports.recordBirth = async (req, res) => {
 };
 
 // ============================================================
-// OBTENER PARTOS DE UNA VACA
+// OBTENER PARTOS DE UNA MADRE
 // ============================================================
 
 exports.getReproductionByAnimal = async (req, res) => {
@@ -206,16 +285,19 @@ exports.getReproductionByAnimal = async (req, res) => {
           sexo,
           fecha_nacimiento,
           estado,
+          categoria,
           peso_actual
         )
-        `,
+      `,
       )
       .eq("id_vaca", id_vaca)
       .order("fecha_parto_real", {
         ascending: false,
       });
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     res.json(data || []);
   } catch (err) {
@@ -228,56 +310,77 @@ exports.getReproductionByAnimal = async (req, res) => {
 };
 
 // ============================================================
-// OBTENER TODAS LAS VACAS CON SUS PARTOS
+// HEMBRAS REPRODUCTIVAS
+// Mauta + Novilla + Vaca
 // ============================================================
 
 exports.getCowsReproduction = async (req, res) => {
   try {
-    const { data: cows, error: cowsError } = await supabase
+    const { data: females, error: femalesError } = await supabase
       .from("animals")
       .select(
-        "id, arete, nombre, sexo, fecha_nacimiento, categoria, estado, finalidad",
-      )
-      .eq("sexo", "Hembra")
-      .eq("estado", "Activo")
-      .order("arete", { ascending: true });
-
-    if (cowsError) throw cowsError;
-
-    const { data: births, error: birthsError } = await supabase
-      .from("reproduction")
-      .select(
         `
-        id,
-        id_vaca,
-        id_cria,
-        fecha_parto_real,
-        peso_cria_nacimiento,
-        condicion_parto,
-        iep_dias,
-        cria:id_cria (
           id,
           arete,
           nombre,
           sexo,
           fecha_nacimiento,
+          fecha_destete,
+          categoria,
           estado,
+          finalidad,
+          condicion_reproductiva,
           peso_actual
-        )
+        `,
+      )
+      .eq("sexo", "Hembra")
+      .eq("estado", "Activo")
+      .in("categoria", ["Mauta", "Novilla", "Vaca"])
+      .order("arete", {
+        ascending: true,
+      });
+
+    if (femalesError) {
+      throw femalesError;
+    }
+
+    const { data: births, error: birthsError } = await supabase
+      .from("reproduction")
+      .select(
+        `
+          id,
+          id_vaca,
+          id_cria,
+          fecha_parto_real,
+          peso_cria_nacimiento,
+          condicion_parto,
+          iep_dias,
+          cria:id_cria (
+            id,
+            arete,
+            nombre,
+            sexo,
+            fecha_nacimiento,
+            estado,
+            categoria,
+            peso_actual
+          )
         `,
       )
       .order("fecha_parto_real", {
         ascending: false,
       });
 
-    if (birthsError) throw birthsError;
+    if (birthsError) {
+      throw birthsError;
+    }
 
-    const result = (cows || []).map((cow) => {
-      const cowBirths = (births || []).filter(
-        (birth) => birth.id_vaca === cow.id,
+    const result = (females || []).map((female) => {
+      const femaleBirths = (births || []).filter(
+        (birth) => birth.id_vaca === female.id,
       );
 
-      const intervals = cowBirths
+      const intervals = femaleBirths
         .map((birth) => Number(birth.iep_dias))
         .filter((value) => Number.isFinite(value) && value > 0);
 
@@ -289,13 +392,13 @@ exports.getCowsReproduction = async (req, res) => {
             )
           : null;
 
-      const lastBirth = cowBirths[0] || null;
+      const lastBirth = femaleBirths[0] || null;
 
-      const calvesAlive = cowBirths.filter(
+      const calvesAlive = femaleBirths.filter(
         (birth) => birth.cria?.estado === "Activo",
       ).length;
 
-      const calvesDead = cowBirths.filter(
+      const calvesDead = femaleBirths.filter(
         (birth) => birth.cria?.estado === "Muerto",
       ).length;
 
@@ -308,18 +411,18 @@ exports.getCowsReproduction = async (req, res) => {
         : null;
 
       return {
-        ...cow,
-        total_partos: cowBirths.length,
+        ...female,
+        total_partos: femaleBirths.length,
         intervalo_promedio_dias: averageInterval,
         ultimo_parto: lastBirth?.fecha_parto_real || null,
         dias_desde_ultimo_parto: daysSinceLastBirth,
         crias_vivas: calvesAlive,
         crias_muertas: calvesDead,
         tasa_supervivencia:
-          cowBirths.length > 0
-            ? Number(((calvesAlive / cowBirths.length) * 100).toFixed(1))
+          femaleBirths.length > 0
+            ? Number(((calvesAlive / femaleBirths.length) * 100).toFixed(1))
             : null,
-        partos: cowBirths,
+        partos: femaleBirths,
       };
     });
 
@@ -347,26 +450,101 @@ exports.recordWeaning = async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
+    const { data: animal, error: animalError } = await supabase
+      .from("animals")
+      .select("*")
+      .eq("id", id_cria)
+      .single();
+
+    if (animalError) {
+      throw animalError;
+    }
+
+    if (animal.categoria !== "Becerro" && animal.categoria !== "Becerra") {
+      return res.status(400).json({
+        error: "Solo un Becerro o Becerra puede registrar el destete",
+      });
+    }
+
+    const { data: birth, error: birthError } = await supabase
       .from("reproduction")
-      .update({
-        fecha_destete,
-        peso_cria_destete:
-          peso_cria_destete !== undefined &&
-          peso_cria_destete !== null &&
-          peso_cria_destete !== ""
-            ? Number(peso_cria_destete)
-            : null,
-      })
+      .select("id")
       .eq("id_cria", id_cria)
+      .maybeSingle();
+
+    if (birthError) {
+      throw birthError;
+    }
+
+    /*
+     * Guardamos siempre la fecha en animals.
+     * Esto permite registrar el destete incluso
+     * en animales comprados que no tienen parto
+     * registrado dentro del sistema.
+     */
+    const updateAnimal = {
+      fecha_destete,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (animal.sexo === "Hembra") {
+      updateAnimal.condicion_reproductiva = "Vacía";
+    }
+
+    const { data: updatedAnimal, error: updateError } = await supabase
+      .from("animals")
+      .update(updateAnimal)
+      .eq("id", id_cria)
       .select()
       .single();
 
-    if (error) throw error;
+    if (updateError) {
+      throw updateError;
+    }
+
+    // Si la cría tiene parto registrado, también guardamos
+    // el peso de destete en reproduction.
+    let reproductionData = null;
+
+    if (birth) {
+      const { data, error } = await supabase
+        .from("reproduction")
+        .update({
+          fecha_destete,
+          peso_cria_destete:
+            peso_cria_destete !== undefined &&
+            peso_cria_destete !== null &&
+            peso_cria_destete !== ""
+              ? Number(peso_cria_destete)
+              : null,
+        })
+        .eq("id", birth.id)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      reproductionData = data;
+    }
+
+    await updateAnimalCategory(updatedAnimal, {
+      motivo: "Destete",
+      fechaInicio: fecha_destete,
+      hasBirths: false,
+    });
+
+    const { data: finalAnimal } = await supabase
+      .from("animals")
+      .select("*")
+      .eq("id", id_cria)
+      .single();
 
     res.json({
       success: true,
-      data,
+      data: finalAnimal,
+      reproduction: reproductionData,
     });
   } catch (err) {
     console.error("recordWeaning:", err);
@@ -408,7 +586,9 @@ exports.updateReproduction = async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     res.json({
       success: true,
