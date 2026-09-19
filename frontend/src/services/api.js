@@ -16,31 +16,37 @@ const api = axios.create({
 export const animalService = {
   getAll: async () => {
     const response = await api.get("/animals");
+
     return response.data;
   },
 
   getById: async (id) => {
     const response = await api.get(`/animals/${id}`);
+
     return response.data;
   },
 
   create: async (animal) => {
     const response = await api.post("/animals", animal);
+
     return response.data;
   },
 
   update: async (id, animal) => {
     const response = await api.put(`/animals/${id}`, animal);
+
     return response.data;
   },
 
   updateLifecycle: async (id, data) => {
     const response = await api.patch(`/animals/${id}/lifecycle`, data);
+
     return response.data;
   },
 
   updateStatus: async (id, estado) => {
     const response = await api.patch(`/animals/${id}/status`, { estado });
+
     return response.data;
   },
 
@@ -104,6 +110,7 @@ export const purchaseService = {
 
   getAll: async () => {
     const response = await api.get("/purchases");
+
     return response.data;
   },
 
@@ -181,6 +188,7 @@ export const expenseService = {
 
   getAll: async () => {
     const response = await api.get("/expenses");
+
     return response.data;
   },
 
@@ -272,6 +280,50 @@ export const saleService = {
 
   getSummary: async () => {
     const response = await api.get("/sales/summary");
+
+    return response.data;
+  },
+};
+
+// ============================================================
+// CONTROL DE CAMPO
+// ============================================================
+
+export const fieldService = {
+  // ----------------------------------------------------------
+  // HERRADO Y NUMERACIÓN
+  // ----------------------------------------------------------
+
+  getIdentification: async () => {
+    const response = await api.get("/field/identification");
+
+    return response.data;
+  },
+
+  updateIdentification: async (animalId, data) => {
+    const response = await api.patch(`/field/identification/${animalId}`, data);
+
+    return response.data;
+  },
+
+  // ----------------------------------------------------------
+  // VACUNACIÓN
+  // ----------------------------------------------------------
+
+  getVaccinations: async () => {
+    const response = await api.get("/field/vaccinations");
+
+    return response.data;
+  },
+
+  getVaccinationHistory: async (animalId) => {
+    const response = await api.get(`/field/vaccinations/${animalId}`);
+
+    return response.data;
+  },
+
+  createVaccination: async (data) => {
+    const response = await api.post("/field/vaccinations", data);
 
     return response.data;
   },
