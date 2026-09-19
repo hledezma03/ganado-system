@@ -29,6 +29,10 @@ export default function Navbar() {
             Vacas
           </Link>
 
+          <Link to="/field" className="rounded px-3 py-2 hover:bg-blue-700">
+            Campo
+          </Link>
+
           <Link to="/expenses" className="rounded px-3 py-2 hover:bg-blue-700">
             Gastos
           </Link>

@@ -11,6 +11,7 @@ import SalesPage from "./pages/SalesPage";
 import WeightsPage from "./pages/WeightsPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ReproductionPage from "./pages/ReproductionPage";
+import FieldControlPage from "./pages/FieldControlPage";
 
 function App() {
   return (
@@ -30,6 +31,8 @@ function App() {
           <Route path="/weights" element={<WeightsPage />} />
 
           <Route path="/reproduction" element={<ReproductionPage />} />
+
+          <Route path="/field" element={<FieldControlPage />} />
 
           <Route path="/reports" element={<ReportsPage />} />
 
